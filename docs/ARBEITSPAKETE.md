@@ -27,6 +27,10 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 3.1 Lokaler Testserver | erledigt | `tests/conftest.py`, `tests/fixtures/sites/` |
 | 3.2 URL-Validierung | erledigt | `core/normalize.py` + `tests/test_fetcher.py` |
 | 3.3 HTTP-Abruf | erledigt | `modules/fetcher.py`, `tests/test_fetcher.py` + Probeabruf echter Seiten |
+| 3.4 HTML-Parsing | erledigt | `tests/test_content_extractor.py` |
+| 3.5 Kontakt-Extraktion | erledigt | `tests/test_content_extractor.py` + 8 echte Seiten |
+| 3.6 Footer + Copyright | erledigt | `tests/test_content_extractor.py` |
+| 3.7 Trafilatura-Vergleich | erledigt | Regeln in `docs/qualitaet.md` |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.

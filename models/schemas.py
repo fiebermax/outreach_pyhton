@@ -188,6 +188,7 @@ class PageResult(_Model):
     contact_links: list[str] = Field(default_factory=list)
     footer_text: str | None = None
     copyright_year: int | None = Field(default=None, ge=1990, le=2100)
+    copyright_text: str | None = None                 # Fundstelle, z. B. "© 2019 Schreinerei Beispiel"
     viewport_width: int | None = Field(default=None, gt=0)
     document_width: int | None = Field(default=None, gt=0)
     horizontal_overflow: bool | None = None           # None = nicht gemessen
