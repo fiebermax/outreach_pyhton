@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     sender_address: str | None = None
     sender_name: str = "Maximilian Fieber"
+    # Postfach-Abgleich (IONOS: imap.ionos.de, Gmail: imap.gmail.com + App-Passwort)
+    imap_host: str | None = None
+    imap_port: int = Field(993, ge=1, le=65535)
+    imap_user: str | None = None
+    imap_password: SecretStr | None = None
 
     # --- Speicher ---
     database_path: Path = Path("data/outreach.db")
@@ -95,7 +100,7 @@ class Settings(BaseSettings):
             raise ValueError(f"unbekanntes LOG_LEVEL: {value}")
         return value
 
-    @field_validator("google_places_api_key", "deepseek_api_key", "smtp_password", mode="before")
+    @field_validator("google_places_api_key", "deepseek_api_key", "smtp_password", "imap_password", mode="before")
     @classmethod
     def _empty_secret_is_none(cls, value):
         return None if isinstance(value, str) and not value.strip() else value
@@ -111,7 +116,7 @@ class Settings(BaseSettings):
 
     def secret_values(self) -> list[str]:
         """Alle gesetzten Geheimnisse, damit das Logging sie maskieren kann."""
-        secrets = [self.google_places_api_key, self.deepseek_api_key, self.smtp_password]
+        secrets = [self.google_places_api_key, self.deepseek_api_key, self.smtp_password, self.imap_password]
         return [s.get_secret_value() for s in secrets if s is not None]
 
     @property

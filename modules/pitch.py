@@ -126,14 +126,14 @@ def _join(*parts: str) -> str:
     return " ".join(p.strip() for p in parts if p and p.strip())
 
 
-def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> EmailDraft | None:
-    """Entwurf aus höchstens zwei Befunden. None, wenn kein Befund einen Baustein hat."""
-    blocks = [(f, b) for f in findings if (b := block_for(f)) is not None][:2]
-    if not blocks:
-        return None
-    (first, b1), rest = blocks[0], blocks[1:]
-    domain = _domain(first.source_url)
-    observation = _sentence_start(b1.observation)
+def build_design_draft(domain: str, observation: str, recipient: str, sender: Sender) -> EmailDraft:
+    """Entwurf aus dem Design-Urteil (Aufhänger der Bild-KI); gleicher Rahmen wie build_draft."""
+    observation = observation.strip().rstrip(".") + "."
+    return EmailDraft(recipient=recipient, subject=f"Ihre Website {domain}",
+                      body=_compose(domain, _sentence_start(observation), "", [], sender), finding_ids=["design_review"])
+
+
+def _compose(domain: str, first: str, hint: str, extras: list[str], sender: Sender) -> str:
     lines = [
         "Guten Tag,",
         "",
@@ -141,12 +141,11 @@ def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> Emai
         f"aus der Gegend bin ich auf {domain} gestoßen, und mir ist etwas aufgefallen, das ich Ihnen gern "
         "kurz weitergeben möchte:",
         "",
-        _join(observation, b1.why),
+        first,
     ]
-    if b1.hint:
-        lines += ["", b1.hint]
-    for _, b in rest:
-        extra = b.observation[0].lower() + b.observation[1:]
+    if hint:
+        lines += ["", hint]
+    for extra in extras:
         lines += ["", f"Außerdem: {extra}"]
     lines += [
         "",
@@ -159,7 +158,18 @@ def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> Emai
     ]
     lines += [x for x in (sender.phone, sender.email, sender.website) if x]
     lines += ["", "Falls Sie keine weiteren Nachrichten von mir möchten, genügt eine kurze Antwort."]
-    return EmailDraft(recipient=recipient, subject=b1.subject, body="\n".join(lines),
+    return "\n".join(lines)
+
+
+def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> EmailDraft | None:
+    """Entwurf aus höchstens zwei Befunden. None, wenn kein Befund einen Baustein hat."""
+    blocks = [(f, b) for f in findings if (b := block_for(f)) is not None][:2]
+    if not blocks:
+        return None
+    (first, b1), rest = blocks[0], blocks[1:]
+    extras = [b.observation[0].lower() + b.observation[1:] for _, b in rest]
+    body = _compose(_domain(first.source_url), _join(_sentence_start(b1.observation), b1.why), b1.hint, extras, sender)
+    return EmailDraft(recipient=recipient, subject=b1.subject, body=body,
                       finding_ids=[f.issue_id for f, _ in blocks])
 
 

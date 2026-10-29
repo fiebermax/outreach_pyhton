@@ -10,19 +10,27 @@ import asyncio
 import html
 import json
 import logging
+import threading
 from collections.abc import Callable
+from contextlib import redirect_stdout
+from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from config import Settings
-from modules.database import Database
+from core.niche import load_niche
+from modules.database import Channel, Database, Outcome
 from modules.design_review import DesignReview, domain_for, load_review, review_dir, review_site
 from modules.excel_export import COLUMNS, collect_rows, export_excel
 from modules.llm import LLMClient
 
 log = logging.getLogger(__name__)
 SCREENSHOTS = {"desktop.png", "mobile.png"}
+JOB = {"running": False, "lines": []}                    # ein Suchlauf zur Zeit
+NOTICE = {"text": ""}                                     # letzte Meldung (z. B. Postfach-Abgleich)
+MAIL_STATE = {"sent": "gesendet", "replied": "Antwort erhalten", "interested": "interessiert",
+              "not_interested": "kein Interesse", "meeting": "Termin", "customer": "Kunde"}
 COL = {name: i for i, (name, _) in enumerate(COLUMNS)}
 
 CSS = """
@@ -59,6 +67,9 @@ tr.manual td:first-child { box-shadow: inset 3px 0 0 #e0a800; }
 ul.bad li::marker { color:var(--bad); } ul.good li::marker { color:var(--ok); }
 .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .hook { background:var(--okbg); border-radius:8px; padding:12px 14px; }
+textarea, select, input[type=number] { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+.grid4 { display:grid; grid-template-columns:2fr 2fr 1fr 1fr auto; gap:8px; align-items:end; }
+@media (max-width:800px) { .grid4 { grid-template-columns:1fr; } }
 .error { background:var(--badbg); color:var(--bad); border-radius:8px; padding:10px 14px; }
 details pre { font-size:12px; white-space:pre-wrap; background:var(--bg); padding:10px; border-radius:6px; }
 @media (max-width: 800px) { .cols { grid-template-columns:1fr; } main { padding:16px; } .card { padding:16px; }
@@ -87,6 +98,8 @@ def render_index(db: Database, settings: Settings, ai_available: bool) -> bytes:
     manual = sum(1 for r in firms if r[COL["Manuell prüfen"]] == "Ja")
     ai_note = ("Das Urteil schreibt DeepSeek nach Ansicht der Screenshots."
                if ai_available else "DEEPSEEK_API_KEY fehlt – das Urteil kommt nur aus den festen Regeln.")
+    mail_state = {row["company_id"]: row["outcome"] for row in db.conn.execute(
+        "SELECT company_id, outcome FROM contact_events ORDER BY occurred_at")}
     rows = []
     for r in firms:
         website = r[COL["Website"]] or ""
@@ -100,14 +113,28 @@ def render_index(db: Database, settings: Settings, ai_available: bool) -> bytes:
                 actions += f" <a class='btn light' href='/bericht?d={quote(domain)}'>Bericht</a>"
         link = f"<a href='{_e(website)}' target=_blank rel=noopener>{_e(website)}</a>" if website.startswith("http") else "–"
         rows.append(
-            f"<tr class='{'manual' if is_manual else ''}'><td>{_e(r[COL['Firma']])}<div class='muted'>"
+            f"<tr class='{'manual' if is_manual else ''}'><td><a href='/firma?id={r[COL['ID']]}'>"
+            f"{_e(r[COL['Firma']])}</a><div class='muted'>"
             f"{_e(r[COL['Branche']] or '')} · {_e(r[COL['Ort']] or '')}</div></td><td>{link}</td>"
-            f"<td><span class='pill {'yes' if is_manual else 'no'}'>{'manuell prüfen' if is_manual else 'Entwurf fertig'}"
+            f"<td><span class='pill {'yes' if is_manual else 'no'}'>"
+            f"{_e(MAIL_STATE.get(mail_state.get(r[COL['ID']]), 'manuell prüfen' if is_manual else 'Entwurf fertig'))}"
             f"</span><div class='muted'>{_e(r[COL['Grund']])}</div></td>"
             f"<td class='hide-sm'>{_e(r[COL['Design-Urteil']]) or '–'}</td><td>{actions}</td></tr>")
     table = ("<table><tr><th>Firma</th><th>Website</th><th>Status</th><th class='hide-sm'>Design</th><th></th></tr>"
              + "".join(rows) + "</table>") if rows else "<p class='muted'>Noch keine Firmen in der Datenbank.</p>"
-    body = (f"<div class='card'><h1>Website prüfen</h1><div class='muted'>Macht Screenshots (Computer + Handy) und "
+    branches = "".join(f"<option>{_e(b.name)}</option>" for b in load_niche().branche)
+    run_card = (f"<div class='card'><h1>Neue Suche</h1><div class='muted'>Sucht Firmen, crawlt die Websites, macht "
+                f"Screenshots + Design-Urteil und schreibt E-Mail-Entwürfe. Es wird nichts versendet.</div><br>"
+                f"<form method='post' action='/lauf' class='grid4'><label>Ort<input type='text' name='ort' "
+                f"placeholder='{_e(load_niche().region.ort)}'></label><label>Branche<select name='branche'>"
+                f"<option value=''>alle</option>{branches}</select></label><label>Suchanfragen<input type='number' "
+                f"name='max' value='4' min='1' max='30'></label><label><input type='checkbox' name='design' checked> "
+                f"Design prüfen</label><button>Suche starten</button></form>"
+                + (f"<p><a href='/lauf'>Läuft gerade … Fortschritt ansehen</a></p>" if JOB["running"] else "")
+                + f"<br><form method='post' action='/postfach' style='display:inline'><button class='btn light'>"
+                f"Postfach abgleichen (gesendet / Antworten)</button></form> <span class='muted'>{_e(NOTICE['text'])}"
+                f"</span></div>")
+    body = (run_card + f"<div class='card'><h1>Website prüfen</h1><div class='muted'>Macht Screenshots (Computer + Handy) und "
             f"beurteilt das Design: veraltet, unattraktiv, nicht fürs Handy gemacht? {_e(ai_note)}</div>"
             f"{_check_form()}</div>"
             f"<div class='card'><h2>Firmen ({len(firms)}, davon {manual} manuell prüfen)</h2>{table}</div>")
@@ -144,6 +171,99 @@ def render_report(review: DesignReview) -> bytes:
     return _page(f"Design: {review.domain}", body)
 
 
+def render_company(db: Database, settings: Settings, cid: int) -> bytes:
+    c = db.get_company(cid)
+    if c is None:
+        return _page("Nicht gefunden", "<div class='card'>Firma nicht gefunden.</div>")
+    row = next((r for r in collect_rows(db, settings.data_dir)[0] if r[COL["ID"]] == cid), None)
+    draft = db.conn.execute("SELECT * FROM email_drafts WHERE company_id = ? ORDER BY id DESC LIMIT 1", (cid,)).fetchone()
+    review = load_review(settings.data_dir, domain_for(c["website"])) if (c["website"] or "").startswith("http") else None
+    report_id = db.latest_report_id(cid)
+    findings = db.get_report(report_id).findings if report_id else []
+    history = "".join(f"<li>{_e(h['occurred_at'][:10])} · {_e(h['channel'])} → {_e(MAIL_STATE.get(h['outcome'], h['outcome']))}"
+                      f"{' · ' + _e(h['note']) if h['note'] else ''}</li>" for h in db.contact_history(cid))
+    info = (f"<div class='card'><div class='muted'><a href='/'>← Übersicht</a></div><h1>{_e(c['name'])}</h1>"
+            f"<div class='muted'>{_e(c['address'] or '')} · {_e(c['phone'] or '')} · {_e(row[COL['E-Mail']] if row else '')}"
+            f"</div>" + (f"<p><a href='{_e(c['website'])}' target=_blank rel=noopener>{_e(c['website'])}</a></p>"
+                         if (c["website"] or "").startswith("http") else "<p>keine Website</p>")
+            + (f"<p><strong>Manuell prüfen:</strong> {_e(row[COL['Grund']])}</p>" if row and row[COL['Grund']] else "")
+            + "</div>")
+    design = ""
+    if review:
+        design = (f"<div class='card'><h2>Design: {_e(review.summary)}</h2>"
+                  f"<ul class='bad'>{''.join(f'<li>{_e(x)}</li>' for x in review.bad[:5])}</ul>"
+                  + (f"<div class='hook'>{_e(review.hook)}</div>" if review.hook else "")
+                  + f"<p><a href='/bericht?d={quote(review.domain)}'>Screenshots & ganzer Bericht</a></p>")
+        if review.hook and draft is None:
+            design += ("<form method='post' action='/firma'><input type='hidden' name='id' value='" + str(cid) + "'>"
+                       "<input type='hidden' name='aktion' value='design_entwurf'><button>E-Mail-Entwurf aus dem "
+                       "Design-Urteil erstellen</button></form>")
+        design += "</div>"
+    elif (c["website"] or "").startswith("http"):
+        design = f"<div class='card'>Noch kein Design-Urteil. {_check_form(c['website'])}</div>"
+    found = "".join(f"<li><strong>{_e(f.category.value)}</strong>: {_e(f.description)} <span class='muted'>{_e(f.evidence)}"
+                    f"</span></li>" for f in findings) or "<li>keine</li>"
+    mail = "<div class='card'><h2>E-Mail</h2><p class='muted'>Noch kein Entwurf.</p></div>"
+    if draft:
+        hidden = f"<input type='hidden' name='id' value='{cid}'><input type='hidden' name='draft' value='{draft['id']}'>"
+        buttons = "".join(f"<button name='aktion' value='{k}' class='btn light'>{_e(v)}</button> "
+                          for k, v in (("sent", "gesendet"), ("replied", "Antwort erhalten"),
+                                       ("interested", "interessiert"), ("not_interested", "kein Interesse")))
+        mail = (f"<div class='card'><h2>E-Mail an {_e(draft['recipient'])} ({_e(draft['status'])})</h2>"
+                f"<form method='post' action='/firma'>{hidden}<label>Betreff<input type='text' name='betreff' "
+                f"value='{_e(draft['subject'])}'></label><br><br><textarea name='text' rows='18'>{_e(draft['body'])}"
+                f"</textarea><br><br><button name='aktion' value='speichern'>Speichern</button> "
+                f"<button name='aktion' value='postfach' class='btn light'>Als Entwurf ins Postfach legen</button>"
+                f"<p class='muted'>Status von Hand setzen (oder oben „Postfach abgleichen“):</p>{buttons}</form>"
+                f"{'<ul>' + history + '</ul>' if history else ''}</div>")
+    notice = f"<div class='hook'>{_e(NOTICE['text'])}</div><br>" if NOTICE["text"] else ""
+    NOTICE["text"] = ""
+    return _page(c["name"], notice + info + mail + design + f"<div class='card'><h2>Befunde</h2><ul>{found}</ul></div>")
+
+
+def run_job(settings: Settings, ort: str, branche: str, max_queries: int, design: bool,
+            llm_factory: Callable[[], LLMClient | None]) -> None:
+    """Kompletter Lauf im Hintergrund; Ausgaben landen in JOB["lines"]."""
+    from main import apply_overrides, cmd_export, cmd_run
+
+    class Lines:
+        def write(self, text):
+            JOB["lines"].extend(t for t in text.splitlines() if t.strip())
+
+        def flush(self):
+            pass
+
+    JOB.update(running=True, lines=[])
+    db = Database(settings.database_path)
+    try:
+        with redirect_stdout(Lines()):
+            niche = apply_overrides(load_niche(), ort or None, branche or None)
+            args = SimpleNamespace(skip_find=False, lead=None, retry_failed=False, no_browser=False, no_ai=False,
+                                   max_queries=max_queries, datei=None)
+            cmd_run(db, settings, niche, args)
+            if design:
+                rows = db.conn.execute("SELECT name, website FROM companies WHERE website LIKE 'http%'").fetchall()
+                todo = [r for r in rows if load_review(settings.data_dir, domain_for(r["website"])) is None]
+                print(f"== Design-Prüfung: {len(todo)} Websites")
+                for r in todo:
+                    review = asyncio.run(review_site(r["website"], settings.data_dir, llm_factory()))
+                    print(f"   - {r['name']}: {review.summary}" + (f" ({review.error})" if review.error else ""))
+                cmd_export(db, settings, niche, args)
+            print("Fertig.")
+    except Exception as exc:              # Fehler sichtbar machen statt den Server zu stoppen
+        JOB["lines"].append(f"Abgebrochen: {type(exc).__name__}: {exc}")
+    finally:
+        db.close()
+        JOB["running"] = False
+
+
+def render_job() -> bytes:
+    refresh = "<meta http-equiv='refresh' content='3'>" if JOB["running"] else ""
+    state = "läuft …" if JOB["running"] else "fertig"
+    return _page("Suchlauf", f"{refresh}<div class='card'><div class='muted'><a href='/'>← Übersicht</a></div>"
+                             f"<h1>Suchlauf {state}</h1><pre>{_e(chr(10).join(JOB['lines']) or 'startet …')}</pre></div>")
+
+
 def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]):
     ai_available = settings.deepseek_api_key is not None
 
@@ -170,6 +290,14 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
                     return self._send(200, render_index(db, settings, ai_available))
                 finally:
                     db.close()
+            if parts.path == "/firma":
+                db = Database(settings.database_path)
+                try:
+                    return self._send(200, render_company(db, settings, int(q.get("id", 0))))
+                finally:
+                    db.close()
+            if parts.path == "/lauf":
+                return self._send(200, render_job())
             if parts.path == "/bericht":
                 review = load_review(settings.data_dir, q.get("d"))
                 if review is None:
@@ -197,16 +325,88 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
             return self._send(404, _page("Nicht gefunden", "<div class='card'>Seite nicht gefunden.</div>"))
 
         def do_POST(self):
-            if urlsplit(self.path).path != "/pruefen":
+            path = urlsplit(self.path).path
+            length = min(int(self.headers.get("Content-Length") or 0), 100_000)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode("utf-8", "replace")).items()}
+            if path == "/lauf":
+                if not JOB["running"]:
+                    threading.Thread(target=run_job, daemon=True, args=(
+                        settings, form.get("ort", "").strip(), form.get("branche", ""),
+                        max(1, min(30, int(form.get("max") or 4))), "design" in form, llm_factory)).start()
+                return self._send(303, headers={"Location": "/lauf"})
+            if path == "/postfach":
+                from modules.mailbox import sync
+                db = Database(settings.database_path)
+                try:
+                    r = sync(db, settings)
+                    NOTICE["text"] = f"Abgleich: {len(r.sent)} neu gesendet, {len(r.replied)} neue Antworten."
+                except Exception as exc:
+                    NOTICE["text"] = f"Postfach-Abgleich fehlgeschlagen: {exc}"
+                finally:
+                    db.close()
+                return self._send(303, headers={"Location": "/"})
+            if path == "/firma":
+                return self._company_action(form)
+            if path != "/pruefen":
                 return self._send(404)
-            length = min(int(self.headers.get("Content-Length") or 0), 10_000)
-            url = (parse_qs(self.rfile.read(length).decode("utf-8", "replace")).get("url") or [""])[0].strip()
+            url = form.get("url", "").strip()
             if not url:
                 return self._send(303, headers={"Location": "/"})
             if "://" not in url:
                 url = "https://" + url
             review = asyncio.run(review_site(url, settings.data_dir, llm_factory()))
             return self._send(303, headers={"Location": f"/bericht?d={quote(review.domain)}"})
+
+        def _company_action(self, form: dict):
+            from modules.mailer import build_message, save_draft
+            from modules.pitch import Sender, build_design_draft, lint_draft
+            from models.schemas import EmailDraft
+            from services.outreach_service import choose_recipient
+            cid, action = int(form.get("id", 0)), form.get("aktion", "")
+            db = Database(settings.database_path)
+            try:
+                draft = db.get_draft(int(form["draft"])) if form.get("draft") else None
+                if draft is not None and draft["company_id"] != cid:
+                    return self._send(400)
+                if action == "speichern" and draft:
+                    with db.transaction() as c:
+                        c.execute("UPDATE email_drafts SET subject = ?, body = ? WHERE id = ?",
+                                  (form.get("betreff", draft["subject"]), form.get("text", draft["body"]), draft["id"]))
+                elif action == "postfach" and draft:
+                    from modules.mailbox import put_draft
+                    msg = build_message(EmailDraft(recipient=draft["recipient"], subject=draft["subject"],
+                                                   body=draft["body"], finding_ids=[]),
+                                        settings.sender_name, settings.sender_address, draft["id"])
+                    try:
+                        NOTICE["text"] = f"Entwurf liegt im Postfach-Ordner „{put_draft(settings, msg)}“."
+                    except Exception as exc:
+                        NOTICE["text"] = f"Postfach nicht erreichbar: {exc}"
+                elif action in MAIL_STATE and draft:
+                    db.record_contact(cid, Channel.EMAIL, Outcome(action), recipient=draft["recipient"],
+                                      draft_id=draft["id"], source="manual")
+                    if action == "sent" and draft["status"] == "draft":
+                        db.set_draft_status(draft["id"], "sent")
+                elif action == "design_entwurf":
+                    c = db.get_company(cid)
+                    review = load_review(settings.data_dir, domain_for(c["website"]))
+                    recipient = choose_recipient(db, cid)
+                    if review and review.hook and recipient:
+                        sender = Sender(name=settings.sender_name, region=load_niche().region.ort,
+                                        email=settings.sender_address)
+                        new = build_design_draft(review.domain, review.hook, recipient, sender)
+                        # Zahlen stammen aus dem Design-Urteil (z. B. „14 px“), nicht erfunden
+                        problems = [x for x in lint_draft(new, [], sender) if not x.startswith("unbelegte Zahl")]
+                        if problems:
+                            NOTICE["text"] = "Entwurf verworfen: " + "; ".join(problems)
+                        else:
+                            save_draft(db, cid, new, settings)
+                    else:
+                        NOTICE["text"] = "Kein Entwurf möglich: keine E-Mail-Adresse oder kein Aufhänger."
+            except Exception as exc:
+                NOTICE["text"] = f"Fehler: {exc}"
+            finally:
+                db.close()
+            return self._send(303, headers={"Location": f"/firma?id={cid}"})
 
     return Handler
 

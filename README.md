@@ -174,7 +174,7 @@ python main.py export
 python main.py ui
 ```
 
-Unter Windows: Doppelklick auf `oberflaeche.bat`. Öffnet http://127.0.0.1:8765 (nur lokal erreichbar).
+Unter Windows: Doppelklick auf `start.bat`. Öffnet http://127.0.0.1:8765 (nur lokal erreichbar).
 
 - URL eingeben oder bei einer Firma auf „Prüfen“ klicken.
 - Es entstehen Screenshots am Computer (1366 px) und am Handy (390 px), beide herunterladbar.
@@ -182,6 +182,12 @@ Unter Windows: Doppelklick auf `oberflaeche.bat`. Öffnet http://127.0.0.1:8765 
   Aufhänger fürs Gespräch) kommt von DeepSeek, wenn `DEEPSEEK_API_KEY` gesetzt ist, sonst aus festen
   Regeln. Es geht nur ums Design, nicht um Tippfehler.
 - Gespeichert wird alles in `data/design/<domain>/`; das Urteil erscheint auch in der Excel-Datei.
+- **Alles in der Oberfläche:** „Neue Suche“ (Ort, Branche, Anzahl Suchanfragen) startet den ganzen Lauf inkl.
+  Design-Prüfung; Klick auf eine Firma zeigt Entwurf (bearbeitbar), Befunde, Design-Urteil und Kontaktverlauf.
+  Ohne Entwurf, aber mit schlechtem Design: „E-Mail-Entwurf aus dem Design-Urteil erstellen“.
+- **Postfach (IONOS oder Gmail):** `IMAP_HOST`, `IMAP_USER`, `IMAP_PASSWORD` in `.env` (IONOS: `imap.ionos.de`,
+  Gmail: `imap.gmail.com` mit App-Passwort). Dann legt „Als Entwurf ins Postfach legen“ die Mail in deinen
+  Entwürfe-Ordner; du sendest sie selbst. „Postfach abgleichen“ erkennt, was gesendet wurde und wer geantwortet hat.
 
 Kontakte festhalten (auch Telefon, Besuch, frühere Kontakte):
 
