@@ -114,3 +114,13 @@ def test_crawl_result_storable(site_server, tmp_path):
     cid = db.upsert_company(Lead(name="Schreinerei Beispiel", source="test"))
     run_id = db.save_crawl(cid.company_id, result)
     assert db.latest_crawl(cid.company_id)[1].pages[0].copyright_year == 2019 and run_id
+
+
+def test_hard_site_deadline(site_server):
+    """Eine hängende Seite darf das Website-Budget nicht überschreiten."""
+    import time as _t
+    slow_fetch = FetchLimits(timeout_seconds=10, retries=0, allow_local=True)
+    t0 = _t.monotonic()
+    result, outcomes = crawl(site_server + "/slow", fetch=slow_fetch, max_seconds=1.5)
+    assert _t.monotonic() - t0 < 3
+    assert result.status is CrawlStatus.TIMEOUT and "Zeitlimit der Website" in result.failure_reason

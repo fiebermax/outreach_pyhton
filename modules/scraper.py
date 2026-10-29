@@ -14,6 +14,7 @@ Websites werden nicht weiter abgefragt.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -157,6 +158,18 @@ class SiteCrawler:
         return PageOutcome(page, links=content.links, content=content, assessment=assessment, render=render,
                            notes=notes)
 
+    async def _crawl_page_within(self, url: str, *, is_home: bool, deadline: float) -> PageOutcome | None:
+        """crawl_page mit harter Obergrenze; None, wenn kein Budget mehr übrig ist."""
+        remaining = deadline - time.monotonic()
+        if remaining <= 1:
+            return None
+        try:
+            return await asyncio.wait_for(self.crawl_page(url, is_home=is_home), timeout=remaining)
+        except asyncio.TimeoutError:
+            reason = f"Zeitlimit der Website ({self.config.max_seconds:.0f}s) während dieser Seite erreicht"
+            return PageOutcome(PageResult(url=url, crawl_status=CrawlStatus.TIMEOUT, failure_reason=reason),
+                               notes=[reason])
+
     async def crawl_site(self, url: str) -> tuple[CrawlResult, list[PageOutcome]]:
         cfg = self.config
         started_at, started = utcnow(), time.monotonic()
@@ -171,10 +184,11 @@ class SiteCrawler:
         if own_client:
             self.client = make_client(cfg.fetch)
         try:
-            outcomes = [await self.crawl_page(home_url, is_home=True)]
+            deadline = started + cfg.max_seconds
+            outcomes = [await self._crawl_page_within(home_url, is_home=True, deadline=deadline)]
             home = outcomes[0].page
             if not home.crawl_status.is_site_inaccessible:
-                outcomes += await self._crawl_subpages(home_url, outcomes, started)
+                outcomes += await self._crawl_subpages(home_url, outcomes, deadline)
         finally:
             if own_client:
                 await self.client.aclose()
@@ -187,7 +201,7 @@ class SiteCrawler:
                  time.monotonic() - started, extra={"url": home_url, "status": site.status.value})
         return result, outcomes
 
-    async def _crawl_subpages(self, home_url: str, outcomes: list[PageOutcome], started: float) -> list[PageOutcome]:
+    async def _crawl_subpages(self, home_url: str, outcomes: list[PageOutcome], deadline: float) -> list[PageOutcome]:
         cfg = self.config
         crawled = {home_url}
         found: set[str] = set()
@@ -200,15 +214,15 @@ class SiteCrawler:
             slots = cfg.max_pages - len(outcomes) - len(new)
             for selected in select_subpages(source.links, home_url, max_pages=slots, already=crawled,
                                             found_categories=found):
-                if time.monotonic() - started > cfg.max_seconds:
-                    log.warning("Zeitlimit %ss für %s erreicht", cfg.max_seconds, home_url)
-                    return new
                 crawled.add(selected.url)
                 found.add(selected.category)
-                outcome = await self.crawl_page(selected.url, is_home=False)
+                outcome = await self._crawl_page_within(selected.url, is_home=False, deadline=deadline)
+                if outcome is None:
+                    log.warning("Zeitlimit %ss für %s erreicht", cfg.max_seconds, home_url)
+                    return new
                 outcome.notes.insert(0, f"Kategorie {selected.category}: {selected.reason}")
                 new.append(outcome)
-                if outcome.page.crawl_status is CrawlStatus.BLOCKED:
-                    return new                  # Sperre gilt für die ganze Website
+                if outcome.page.crawl_status in (CrawlStatus.BLOCKED, CrawlStatus.TIMEOUT):
+                    return new                  # Sperre oder Zeitbudget gilt für die ganze Website
                 frontier.append((outcome, depth + 1))
         return new

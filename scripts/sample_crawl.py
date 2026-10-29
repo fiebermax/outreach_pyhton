@@ -37,26 +37,46 @@ def places(query: str, key: str) -> list[dict]:
     return r.json().get("places", [])
 
 
-async def crawl_all(sites: list[tuple[str, str, str]], concurrency: int) -> list[tuple]:
-    config = CrawlConfig.from_settings(get_settings())
+def format_row(name, branche, url, result, secs, error) -> str:
+    if result is None:
+        return f"| {name[:30]} | {branche} | ABSTURZ | – | – | – | – | – | – | – | {secs:.0f}s |  ← {error[:80]}"
+    home = result.pages[0]
+    phones = result.contacts(ContactKind.PHONE)
+    links = sum(1 for p in phones if p.origin is ContactOrigin.LINK)
+    return (f"| {name[:30]} | {branche} | {result.status.value} | {len(result.usable_pages)}/{len(result.pages)} | "
+            f"{home.word_count if home.word_count is not None else '–'} | {home.extraction_method.value} | "
+            f"{home.horizontal_overflow} | {links}/{len(phones) - links} | {len(result.contacts(ContactKind.EMAIL))} | "
+            f"{home.copyright_year or '–'} | {secs:.0f}s |")
+
+
+async def crawl_all(sites: list[tuple[str, str, str]], concurrency: int, max_seconds: float) -> list[tuple]:
+    """Crawlt parallel und gibt jede Zeile sofort aus (ein Abbruch verliert nichts)."""
+    from dataclasses import replace
+    config = replace(CrawlConfig.from_settings(get_settings()), max_seconds=max_seconds)
     sem = asyncio.Semaphore(concurrency)
+    rows = []
     async with BrowserRenderer(BrowserLimits()) as renderer:
         async def one(name: str, branche: str, url: str):
             async with sem:
                 t = time.monotonic()
                 try:
-                    result, outcomes = await SiteCrawler(config, renderer=renderer).crawl_site(url)
-                    return name, branche, url, result, outcomes, time.monotonic() - t, None
+                    result, _ = await SiteCrawler(config, renderer=renderer).crawl_site(url)
+                    return name, branche, url, result, time.monotonic() - t, None
                 except Exception as exc:  # Stichprobe soll nie abbrechen; Fehler wird berichtet
-                    return name, branche, url, None, [], time.monotonic() - t, f"{type(exc).__name__}: {exc}"
-        return await asyncio.gather(*(one(*s) for s in sites))
+                    return name, branche, url, None, time.monotonic() - t, f"{type(exc).__name__}: {exc}"
+        for task in asyncio.as_completed([one(*s) for s in sites]):
+            row = await task
+            rows.append(row)
+            print(format_row(*row), flush=True)
+    return rows
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--queries", type=int, default=4, help="Anzahl Places-Abfragen (Kosten!)")
     parser.add_argument("--max-sites", type=int, default=25)
-    parser.add_argument("--concurrency", type=int, default=3)
+    parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument("--max-seconds", type=float, default=60.0, help="Zeitlimit je Website")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("trafilatura").setLevel(logging.CRITICAL)
@@ -86,27 +106,15 @@ def main() -> None:
                 sites.append((name, match.branche, url))
     sites = sites[: args.max_sites]
 
-    t0 = time.monotonic()
-    rows = asyncio.run(crawl_all(sites, args.concurrency))
     print(f"# Stichprobe Crawl ({time.strftime('%d.%m.%Y %H:%M')})\n")
-    print(f"Abfragen: {args.queries} · Websites gecrawlt: {len(rows)} · Laufzeit gesamt: {time.monotonic() - t0:.0f}s")
-    print(f"Übersprungen: " + ", ".join(f"{k}: {v}" for k, v in skipped.items()) + "\n")
+    print(f"Abfragen: {args.queries} · Websites: {len(sites)} · Zeitlimit je Website: {args.max_seconds:.0f}s")
+    print("Übersprungen: " + ", ".join(f"{k}: {v}" for k, v in skipped.items()) + "\n")
     print("| Firma | Branche | Status | Seiten (ok/ges.) | Wörter Start | Methode Start | Overflow | Tel. Link/Text | E-Mail | © | Zeit |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|")
-    for name, branche, url, result, outcomes, secs, error in rows:
-        if result is None:
-            print(f"| {name[:30]} | {branche} | ABSTURZ | – | – | – | – | – | – | – | {secs:.0f}s |  ← {error[:80]}")
-            continue
-        home = result.pages[0]
-        phones = result.contacts(ContactKind.PHONE)
-        links = sum(1 for p in phones if p.origin is ContactOrigin.LINK)
-        emails = len(result.contacts(ContactKind.EMAIL))
-        ok = len(result.usable_pages)
-        print(f"| {name[:30]} | {branche} | {result.status.value} | {ok}/{len(result.pages)} | "
-              f"{len(home.cleaned_text.split())} | {home.extraction_method.value} | {home.horizontal_overflow} | "
-              f"{links}/{len(phones) - links} | {emails} | {home.copyright_year or '–'} | {secs:.0f}s |")
-    print("\n## Gründe bei nicht vollem Erfolg\n")
-    for name, _, url, result, outcomes, _, error in rows:
+    print("|---|---|---|---|---|---|---|---|---|---|---|", flush=True)
+    t0 = time.monotonic()
+    rows = asyncio.run(crawl_all(sites, args.concurrency, args.max_seconds))
+    print(f"\nLaufzeit gesamt: {time.monotonic() - t0:.0f}s\n\n## Gründe bei nicht vollem Erfolg\n")
+    for name, _, url, result, _, error in rows:
         if result is not None and result.failure_reason:
             print(f"- **{name[:40]}** ({url}): {result.failure_reason[:200]}")
 
