@@ -37,7 +37,8 @@ def places(query: str, key: str) -> list[dict]:
     return r.json().get("places", [])
 
 
-def format_row(name, branche, url, result, secs, error) -> str:
+def format_row(name, branche, url, result, secs, error, outcomes=None) -> str:
+    name = name.replace("|", "/")
     if result is None:
         return f"| {name[:30]} | {branche} | ABSTURZ | – | – | – | – | – | – | – | {secs:.0f}s |  ← {error[:80]}"
     home = result.pages[0]
@@ -60,10 +61,10 @@ async def crawl_all(sites: list[tuple[str, str, str]], concurrency: int, max_sec
             async with sem:
                 t = time.monotonic()
                 try:
-                    result, _ = await SiteCrawler(config, renderer=renderer).crawl_site(url)
-                    return name, branche, url, result, time.monotonic() - t, None
+                    result, outcomes = await SiteCrawler(config, renderer=renderer).crawl_site(url)
+                    return name, branche, url, result, time.monotonic() - t, None, outcomes
                 except Exception as exc:  # Stichprobe soll nie abbrechen; Fehler wird berichtet
-                    return name, branche, url, None, time.monotonic() - t, f"{type(exc).__name__}: {exc}"
+                    return name, branche, url, None, time.monotonic() - t, f"{type(exc).__name__}: {exc}", []
         for task in asyncio.as_completed([one(*s) for s in sites]):
             row = await task
             rows.append(row)
@@ -77,6 +78,7 @@ def main() -> None:
     parser.add_argument("--max-sites", type=int, default=25)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--max-seconds", type=float, default=60.0, help="Zeitlimit je Website")
+    parser.add_argument("--details", help="Pfad für JSON mit URLs und Ablaufnotizen je Seite")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("trafilatura").setLevel(logging.CRITICAL)
@@ -114,9 +116,14 @@ def main() -> None:
     t0 = time.monotonic()
     rows = asyncio.run(crawl_all(sites, args.concurrency, args.max_seconds))
     print(f"\nLaufzeit gesamt: {time.monotonic() - t0:.0f}s\n\n## Gründe bei nicht vollem Erfolg\n")
-    for name, _, url, result, _, error in rows:
+    for name, _, url, result, _, error, _ in rows:
         if result is not None and result.failure_reason:
-            print(f"- **{name[:40]}** ({url}): {result.failure_reason[:200]}")
+            print(f"- **{name[:40].replace('|', '/')}** ({url}): {result.failure_reason[:200]}")
+    if args.details:
+        details = [{"name": n, "url": u, "status": r.status.value if r else "ABSTURZ", "error": e,
+                    "pages": [{"url": o.page.url, "status": o.page.crawl_status.value, "notes": o.notes} for o in outs]}
+                   for n, _, u, r, _, e, outs in rows]
+        Path(args.details).write_text(__import__("json").dumps(details, ensure_ascii=False, indent=1))
 
 
 if __name__ == "__main__":
