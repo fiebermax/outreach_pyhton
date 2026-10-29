@@ -24,10 +24,10 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = []
+py-modules = ["config"]
 
 [tool.setuptools.packages.find]
-include = ["modules*", "services*", "models*"]
+include = ["core*", "modules*", "services*", "models*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

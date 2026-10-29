@@ -6,6 +6,20 @@ Jedes Paket = ein Prompt / eine Sitzung. Erst weiter, wenn das Abnahmekriterium 
 Stand Bestandsaufnahme (2026-10-29): Repository `outreach_pyhton` ist leer, keine Commits,
 keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder zu reparieren.
 
+## Fortschritt
+
+| Paket | Status | Nachweis |
+|---|---|---|
+| 1.1 Projektgerüst | erledigt | `tests/test_smoke.py` |
+| 1.2 Open-Source-Recherche | offen | – |
+| 1.3 Konfiguration | erledigt | `tests/test_config.py` |
+| 1.4 Logging | erledigt | `tests/test_logging.py` |
+| 1.5 Fehlertypen | erledigt | `tests/test_errors_retry.py` |
+| 1.6 Retry | erledigt | `tests/test_errors_retry.py` |
+
+Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
+damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.
+
 Legende: **Ergebnis** = was danach existiert · **Abnahme** = wie man prüft, dass es fertig ist · **braucht** = Abhängigkeiten
 
 ---
