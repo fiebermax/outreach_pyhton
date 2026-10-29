@@ -1,0 +1,23 @@
+# Zugangsdaten
+.env
+.env.*
+!.env.example
+
+# Lokale Daten
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+*.db
+*.sqlite
+*.eml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
