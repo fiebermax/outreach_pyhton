@@ -40,6 +40,10 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 3.9 Playwright-Stufe | erledigt | `modules/browser.py`, `tests/test_browser.py` + 8 echte Seiten |
 | 3.10 Layout-Messung | erledigt | `tests/test_browser.py` (echtes Scrollen statt nur scrollWidth) |
 | 3.11 Cookie-Banner | erledigt | `tests/test_browser.py`, `tests/test_quality_control.py` + hins-zimmerei.de |
+| 3.8 Rohes HTML speichern | erledigt | `modules/html_store.py`, `tests/test_page_selection.py` |
+| 3.12 Blockade-Erkennung | erledigt | HTTP 401/403 + Inhaltsmuster, kein Browser bei Sperre (`tests/test_scraper.py`) |
+| 3.13 Unterseiten-Auswahl | erledigt | `modules/page_selection.py`, `tests/test_page_selection.py` |
+| 3.14 Stufen-Orchestrierung | erledigt | `modules/scraper.py`, `tests/test_scraper.py` |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,

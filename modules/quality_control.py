@@ -182,7 +182,8 @@ class SiteAssessment:
 
     @property
     def failure_reason(self) -> str | None:
-        return None if self.status.is_usable else "; ".join(self.reasons)
+        """Grund für alles außer vollem Erfolg – auch ein Teilerfolg muss erklären, was fehlt."""
+        return None if self.status is CrawlStatus.SUCCESS else "; ".join(self.reasons)
 
 
 def assess_site(pages: list[PageResult]) -> SiteAssessment:
