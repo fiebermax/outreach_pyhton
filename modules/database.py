@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from core.normalize import address_key, normalize_company_name, normalize_domain
-from models.schemas import AnalysisReport, ContactInfo, CrawlResult, Lead
+from models.schemas import AnalysisReport, ContactInfo, CrawlResult, EmailDraft, Lead, LeadScore
 
 # Domains, unter denen viele fremde Firmen eine Seite haben. Sie taugen nicht
 # als Identitätsmerkmal, sonst würden alle Facebook-Seiten zu einer Firma.
@@ -316,6 +316,19 @@ _MIGRATIONS: list[str] = [
         {_TS}
     );
     CREATE INDEX ix_api_calls_provider ON api_calls(provider, created_at);
+    """,
+    # --- v4: dokumentierte Versandfreigabe (§ 7 UWG) -------------------------
+    f"""
+    CREATE TABLE send_approvals (
+        id INTEGER PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        legal_basis TEXT NOT NULL CHECK (legal_basis IN ('einwilligung', 'bestandskunde', 'anfrage_des_empfaengers')),
+        note TEXT NOT NULL CHECK (length(note) >= 10),
+        approved_by TEXT NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
+        {_TS}
+    );
+    CREATE INDEX ix_send_approvals_company ON send_approvals(company_id);
     """,
 ]
 
@@ -777,4 +790,67 @@ class Database:
         month = (now or datetime.now(timezone.utc)).strftime("%Y-%m")
         return self.conn.execute("SELECT COUNT(*) FROM api_calls WHERE provider = ? AND substr(created_at, 1, 7) = ?",
                                  (provider, month)).fetchone()[0]
+
+    # ------------------------------------------------------------- Score, Entwürfe, Versand
+
+    def save_score(self, company_id: int, report_id: int | None, score: LeadScore) -> int:
+        now = _now()
+        with self.transaction() as c:
+            return c.execute(
+                "INSERT INTO lead_scores (company_id, report_id, score, disqualified, score_json, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (company_id, report_id, score.score, int(score.disqualified), score.model_dump_json(), now, now),
+            ).lastrowid
+
+    def latest_report_id(self, company_id: int) -> int | None:
+        row = self.conn.execute("SELECT id FROM analysis_reports WHERE company_id = ? ORDER BY id DESC LIMIT 1",
+                                (company_id,)).fetchone()
+        return row["id"] if row else None
+
+    def insert_draft(self, company_id: int, report_id: int | None, draft: EmailDraft, eml_path: str | None) -> int:
+        now = _now()
+        with self.transaction() as c:
+            return c.execute(
+                "INSERT INTO email_drafts (company_id, report_id, recipient, subject, body, finding_ids_json, eml_path,"
+                " status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)",
+                (company_id, report_id, draft.recipient, draft.subject, draft.body, json.dumps(draft.finding_ids),
+                 eml_path, now, now),
+            ).lastrowid
+
+    def get_draft(self, draft_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM email_drafts WHERE id = ?", (draft_id,)).fetchone()
+
+    def list_drafts(self, status: str | None = None) -> list[sqlite3.Row]:
+        sql = ("SELECT d.*, c.name AS company_name FROM email_drafts d JOIN companies c ON c.id = d.company_id")
+        args: tuple = ()
+        if status:
+            sql += " WHERE d.status = ?"
+            args = (status,)
+        return self.conn.execute(sql + " ORDER BY d.id", args).fetchall()
+
+    def set_draft_status(self, draft_id: int, status: str) -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE email_drafts SET status = ?, updated_at = ? WHERE id = ?", (status, _now(), draft_id))
+
+    def log_send_attempt(self, draft_id: int, success: bool, error: str | None) -> None:
+        now = _now()
+        with self.transaction() as c:
+            c.execute("INSERT INTO send_attempts (draft_id, success, error, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                      (draft_id, int(success), error, now, now))
+
+    def add_send_approval(self, company_id: int, legal_basis: str, note: str, approved_by: str) -> int:
+        now = _now()
+        with self.transaction() as c:
+            return c.execute(
+                "INSERT INTO send_approvals (company_id, legal_basis, note, approved_by, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)", (company_id, legal_basis, note.strip(), approved_by.strip(), now, now),
+            ).lastrowid
+
+    def active_send_approval(self, company_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM send_approvals WHERE company_id = ? AND revoked = 0 ORDER BY id DESC"
+                                 " LIMIT 1", (company_id,)).fetchone()
+
+    def already_sent_to(self, company_id: int, recipient: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM email_drafts WHERE company_id = ? AND recipient = ? AND status = 'sent'",
+                                 (company_id, recipient.lower())).fetchone() is not None
 
