@@ -36,6 +36,8 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 4.3 Website-Ebene | erledigt | `tests/test_quality_control.py` |
 | 4.4 Website- vs. Scraper-Fehler | erledigt | `tests/test_quality_control.py` |
 | 4.6 Schutz-Test | erledigt | `tests/test_database.py::test_report_for_bad_crawl_is_refused` |
+| N.1 Kontakthistorie (Zusatz) | erledigt | `tests/test_contacts_history.py` – alle Kanäle, Sperrfrist, Sperrvermerk, CSV-Import |
+| N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.
@@ -110,6 +112,7 @@ Legende: **Ergebnis** = was danach existiert · **Abnahme** = wie man prüft, da
 | 5.5 | Cache | Erfolgreiche API-Antworten nach (Quelle, Ort, Branche, Seite) zwischenspeichern | Test: zweiter Aufruf → kein HTTP | 5.3 |
 | 5.6 | Speichern + Export | Leads via Upsert (2.7) in DB, optional JSON-Export | Test: 2 Läufe → keine Dubletten | 2.7, 5.3 |
 | 5.7 | Verzeichnisprofile erkennen | Website-URL, die auf ein Branchenverzeichnis/Social-Profil zeigt (z. B. `firmen.tv/...`, `fensterbau.io/...`, Facebook), als „keine eigene Website“ markieren: nicht crawlen und kritisieren, sondern als eigenes Lead-Signal speichern | Tests mit den echten Beispielen aus Jettingen-Scheppach | 5.3 |
+| 5.8 | Nische anwenden | Suchanfragen aus `niche.toml`, Branche + Passung je Firma speichern, Abfragelimit pro Lauf (voller Lauf = 98 Abfragen) | Test: Limit greift, Cache verhindert Doppelabfragen | 5.3, N.2 |
 
 ## Phase 6 – Website-Prüfungen und KI-Analyse
 

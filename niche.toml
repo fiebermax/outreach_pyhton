@@ -1,0 +1,89 @@
+# Zielnische: Wen sucht das System, und wen bevorzugt es?
+# Diese Datei ist zum Bearbeiten gedacht. Änderungen wirken beim nächsten Lauf.
+#
+# Hinweis zur Zuordnung: Google-Kategorien sind grob (Schreinerei = "Hersteller",
+# Heizungsbau = "Generalunternehmer"). Entscheidend sind deshalb die Schlüsselwörter
+# im Firmennamen; "places_typen" ist nur ein zusätzliches Signal.
+
+[region]
+ort = "Jettingen-Scheppach"
+# Weitere Orte, die mit abgesucht werden (gleiche Branchenliste)
+weitere_orte = ["Burgau", "Günzburg", "Ichenhausen", "Zusmarshausen", "Dinkelscherben", "Krumbach"]
+radius_km = 20
+
+[suche]
+max_treffer_pro_suche = 20    # Google liefert max. 20 pro Seite
+max_seiten_pro_suche = 1      # jede weitere Seite kostet eine Abfrage
+
+# Prioritaet 1.0 = Kernzielgruppe, 0.5 = nimmt man mit, 0 = nur wenn nichts anderes
+[[branche]]
+name = "Schreiner/Tischler"
+suchbegriffe = ["Schreinerei", "Tischlerei"]
+schluesselwoerter = ["schreiner", "tischler", "möbelbau", "innenausbau"]
+places_typen = ["carpenter", "furniture_maker"]
+prioritaet = 1.0
+
+[[branche]]
+name = "Zimmerei/Holzbau"
+suchbegriffe = ["Zimmerei", "Holzbau"]
+schluesselwoerter = ["zimmerei", "holzbau", "zimmerer", "dachbau"]
+places_typen = ["roofing_contractor"]
+prioritaet = 1.0
+
+[[branche]]
+name = "Maler/Stuckateur"
+suchbegriffe = ["Malerbetrieb", "Stuckateur"]
+schluesselwoerter = ["maler", "malerei", "stuckateur", "verputzer", "farb", "lackier"]
+places_typen = ["painter"]
+prioritaet = 1.0
+
+[[branche]]
+name = "Elektro"
+suchbegriffe = ["Elektriker", "Elektroinstallation"]
+schluesselwoerter = ["elektro", "elektriker", "photovoltaik", "gebäudetechnik"]
+places_typen = ["electrician"]
+prioritaet = 1.0
+
+[[branche]]
+name = "Sanitär/Heizung"
+suchbegriffe = ["Heizung Sanitär", "Installateur"]
+schluesselwoerter = ["sanitär", "heizung", "installateur", "haustechnik", "bäder"]
+places_typen = ["plumber"]
+prioritaet = 1.0
+
+[[branche]]
+name = "Dachdecker/Spengler"
+suchbegriffe = ["Dachdecker", "Spenglerei"]
+schluesselwoerter = ["dachdecker", "spengler", "bedachung"]
+places_typen = ["roofing_contractor"]
+prioritaet = 0.8
+
+[[branche]]
+name = "Bau/Sanierung"
+suchbegriffe = ["Bauunternehmen", "Sanierung"]
+schluesselwoerter = ["bau ", "bauunternehmen", "sanierung", "hochbau", "metallbau", "zaunbau", "fliesen"]
+places_typen = ["general_contractor"]
+prioritaet = 0.6
+
+[ausschluss]
+# Ketten, Baumärkte, Großunternehmen: kein Bedarf an einem regionalen Webdesigner
+namen_enthalten = ["bauhaus", "obi ", "hornbach", "toom", "hagebau", "globus baumarkt", "würth", "ikea"]
+places_typen = ["home_improvement_store", "hardware_store", "furniture_store"]
+
+# Welche Befund-Kategorien passen zu deinem Angebot? (für das Lead-Scoring, Paket 7.1)
+# 1.0 = genau dein Kerngeschäft, 0 = kannst du nicht beheben
+[angebot]
+MOBILE = 1.0
+ACCESSIBILITY = 1.0      # HTTPS, Erreichbarkeit
+CONTACT = 1.0            # Kontakt schwer auffindbar, Telefonnummer nicht klickbar
+NAVIGATION = 0.9
+CALL_TO_ACTION = 0.9
+PERFORMANCE = 0.9
+METADATA = 0.8
+LINKS = 0.8
+CLARITY = 0.7
+SPELLING = 0.6
+GRAMMAR = 0.6
+CONSISTENCY = 0.6
+MAINTENANCE = 0.5        # z. B. veraltetes Copyright – kleiner Hinweis, kein Verkaufsargument
+LEGAL = 0.4              # Impressum/Datenschutz: Hinweis ja, Rechtsberatung nein
