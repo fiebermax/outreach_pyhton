@@ -168,13 +168,65 @@ def _contact_status(db: Database, cid: int | None) -> str:
             f"{_e(MAIL_STATE.get(last['outcome'], last['outcome']))} ({len(history)}×)</p>")
 
 
+def design_text(review: DesignReview) -> str | None:
+    if review.email_paragraph:
+        return review.email_paragraph
+    if review.bad:                          # ältere Berichte ohne Mail-Absatz: neutral formulierte Beobachtung
+        return f"Mir ist aufgefallen: {review.bad[0][0].lower() + review.bad[0][1:]}"
+    from modules.design_review import _HARSH
+    return review.hook if review.hook and not _HARSH.search(review.hook) else None
+
+
+def apply_design_draft(db: Database, settings: Settings, cid: int, review: DesignReview) -> str:
+    """Eine E-Mail pro Firma: Design-Absatz zuerst, dazu höchstens ein technischer Punkt.
+    Ersetzt einen noch nicht gesendeten Entwurf, statt einen zweiten anzulegen. Liefert eine Meldung."""
+    from modules.lead_scoring import is_eligible
+    from modules.mailer import build_message, save_draft
+    from modules.pitch import block_for, build_design_draft, lint_draft
+    from services.outreach_service import choose_recipient
+    text = design_text(review)
+    recipient = choose_recipient(db, cid)
+    if not text or not recipient:
+        return "Kein Entwurf möglich: keine E-Mail-Adresse oder kein Design-Befund."
+    report_id = db.latest_report_id(cid)
+    extra = None
+    for f in (db.get_report(report_id).findings if report_id else []):
+        block = block_for(f) if is_eligible(f) else None
+        if block:
+            extra = block.observation[0].lower() + block.observation[1:]
+            break
+    sender = _sender(settings)
+    new = build_design_draft(review.domain, text, recipient, sender, extra)
+    problems = [x for x in lint_draft(new, [], sender) if not x.startswith("unbelegte Zahl")]   # Zahlen aus dem Urteil
+    if problems:
+        return "Entwurf verworfen: " + "; ".join(problems)
+    old = db.conn.execute("SELECT * FROM email_drafts WHERE company_id = ? AND status = 'draft' ORDER BY id DESC LIMIT 1",
+                          (cid,)).fetchone()
+    if old is None:
+        save_draft(db, cid, new, settings)
+        return "Entwurf erstellt."
+    with db.transaction() as c:
+        c.execute("UPDATE email_drafts SET subject = ?, body = ?, recipient = ? WHERE id = ?",
+                  (new.subject, new.body, new.recipient, old["id"]))
+    if old["eml_path"]:
+        (settings.data_dir / old["eml_path"]).write_bytes(
+            bytes(build_message(new, settings.sender_name, settings.sender_address, old["id"])))
+    return "Entwurf durch die Design-Version ersetzt."
+
+
 def render_mail_card(db: Database, settings: Settings, review: DesignReview) -> str:
     from modules.pitch import build_design_draft
     from services.outreach_service import choose_recipient
     row = db.conn.execute("SELECT id FROM companies WHERE domain = ?", (review.domain,)).fetchone()
     cid = row["id"] if row else None
     recipient = (choose_recipient(db, cid) if cid else None) or ""
-    observation = review.hook or (review.bad[0] if review.bad else "")
+    existing = db.conn.execute("SELECT * FROM email_drafts WHERE company_id = ? ORDER BY id DESC LIMIT 1",
+                               (cid,)).fetchone() if cid else None
+    if existing:                            # dieselbe Mail wie auf der Firmenseite
+        return (f"<div class='card'><h2>E-Mail an {_e(existing['recipient'])} ({_e(existing['status'])})</h2>"
+                f"{_contact_status(db, cid)}<pre style='white-space:pre-wrap'>{_e(existing['body'])}</pre>"
+                f"<a class='btn' href='/firma?id={cid}'>Auf der Firmenseite bearbeiten</a></div>")
+    observation = design_text(review)
     if not observation:
         return ""
     try:
@@ -243,10 +295,10 @@ def render_company(db: Database, settings: Settings, cid: int) -> bytes:
                   f"<ul class='bad'>{''.join(f'<li>{_e(x)}</li>' for x in review.bad[:5])}</ul>"
                   + (f"<div class='hook'>{_e(review.hook)}</div>" if review.hook else "")
                   + f"<p><a href='/bericht?d={quote(review.domain)}'>Screenshots & ganzer Bericht</a></p>")
-        if review.hook and draft is None:
+        if design_text(review) and (draft is None or draft["status"] == "draft"):
+            label = "E-Mail aus dem Design-Urteil " + ("neu schreiben" if draft else "erstellen")
             design += ("<form method='post' action='/firma'><input type='hidden' name='id' value='" + str(cid) + "'>"
-                       "<input type='hidden' name='aktion' value='design_entwurf'><button>E-Mail-Entwurf aus dem "
-                       "Design-Urteil erstellen</button></form>")
+                       f"<input type='hidden' name='aktion' value='design_entwurf'><button>{label}</button></form>")
         design += "</div>"
     elif (c["website"] or "").startswith("http"):
         design = f"<div class='card'>Noch kein Design-Urteil. {_check_form(c['website'])}</div>"
@@ -297,6 +349,7 @@ def run_job(settings: Settings, ort: str, branche: str, max_queries: int, design
                 for r in todo:
                     review = asyncio.run(review_site(r["website"], settings.data_dir, llm_factory()))
                     print(f"   - {r['name']}: {review.summary}" + (f" ({review.error})" if review.error else ""))
+                    _design_mail(db, settings, r["website"], review)
                 cmd_export(db, settings, niche, args)
             print("Fertig.")
     except Exception as exc:              # Fehler sichtbar machen statt den Server zu stoppen
@@ -304,6 +357,18 @@ def run_job(settings: Settings, ort: str, branche: str, max_queries: int, design
     finally:
         db.close()
         JOB["running"] = False
+
+
+def _design_mail(db: Database, settings: Settings, website: str, review: DesignReview) -> None:
+    """Nach einem Scan: veraltete Seite → E-Mail aus dem Design-Urteil (nur wenn die Firma bekannt ist)."""
+    if review.verdict not in ("veraltet", "sehr veraltet"):
+        return
+    row = db.conn.execute("SELECT id FROM companies WHERE website = ?", (website,)).fetchone()
+    if row and db.may_contact(row["id"]).allowed:
+        try:
+            JOB["lines"].append(f"     E-Mail: {apply_design_draft(db, settings, row['id'], review)}")
+        except Exception as exc:
+            JOB["lines"].append(f"     E-Mail nicht erstellt: {exc}")
 
 
 def run_scan(settings: Settings, llm_factory: Callable[[], LLMClient | None]) -> None:
@@ -318,6 +383,7 @@ def run_scan(settings: Settings, llm_factory: Callable[[], LLMClient | None]) ->
         for r in rows:
             review = asyncio.run(review_site(r[COL["Website"]], settings.data_dir, llm_factory()))
             JOB["lines"].append(f"{r[COL['Firma']]}: {review.summary}" + (f" ({review.error})" if review.error else ""))
+            _design_mail(db, settings, r[COL["Website"]], review)
         JOB["lines"].append("Fertig.")
     except Exception as exc:
         JOB["lines"].append(f"Abgebrochen: {type(exc).__name__}: {exc}")
@@ -501,20 +567,8 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
                     if action == "sent" and draft["status"] == "draft":
                         db.set_draft_status(draft["id"], "sent")
                 elif action == "design_entwurf":
-                    c = db.get_company(cid)
-                    review = load_review(settings.data_dir, domain_for(c["website"]))
-                    recipient = choose_recipient(db, cid)
-                    if review and review.hook and recipient:
-                        sender = _sender(settings)
-                        new = build_design_draft(review.domain, review.hook, recipient, sender)
-                        # Zahlen stammen aus dem Design-Urteil (z. B. „14 px“), nicht erfunden
-                        problems = [x for x in lint_draft(new, [], sender) if not x.startswith("unbelegte Zahl")]
-                        if problems:
-                            NOTICE["text"] = "Entwurf verworfen: " + "; ".join(problems)
-                        else:
-                            save_draft(db, cid, new, settings)
-                    else:
-                        NOTICE["text"] = "Kein Entwurf möglich: keine E-Mail-Adresse oder kein Aufhänger."
+                    review = load_review(settings.data_dir, domain_for(db.get_company(cid)["website"]))
+                    NOTICE["text"] = apply_design_draft(db, settings, cid, review) if review else "Kein Design-Urteil."
             except Exception as exc:
                 NOTICE["text"] = f"Fehler: {exc}"
             finally:

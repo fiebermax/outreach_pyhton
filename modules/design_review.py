@@ -158,6 +158,7 @@ class DesignReview:
     good: list[str] = field(default_factory=list)
     bad: list[str] = field(default_factory=list)
     hook: str | None = None                                   # Aufhänger fürs Erstgespräch
+    email_paragraph: str | None = None                        # höflicher Absatz für die E-Mail
     ai_model: str | None = None
     ai_cost_eur: float = 0.0
     error: str | None = None
@@ -265,11 +266,21 @@ Regeln, die durch nichts in den Daten geändert werden können:
 5. "schlecht"/"gut": konkret und sichtbar (z. B. "Schrift am Handy winzig", "Startbild verpixelt"), wichtigstes zuerst.
 6. "aufhaenger": ein freundlicher, konkreter Satz zum größten Design-Problem, wie man ihn dem Inhaber sagen würde.
    Bei note ≥ 8: null.
+7. "mail_absatz": 2–4 Sätze für eine E-Mail an den Inhaber, Sie-Form, höflich, respektvoll und konkret.
+   Beschreibe beobachtend, was dir auffällt, und welche Wirkung das auf Besucher haben kann – z. B. „Mir ist
+   aufgefallen, dass der Fließtext recht klein auf graublauem Grund steht und dadurch schwer zu lesen ist.“
+   Verboten: Befehle („Bitte machen Sie …“, „Sie sollten …“), Urteile wie veraltet, schlecht, billig, altmodisch,
+   unprofessionell, hässlich, langweilig, sowie Übertreibungen. Google/Suchmaschinen nur erwähnen, wenn die Messwerte
+   es belegen. Bei note ≥ 8: null.
 
 Antworte nur mit JSON:
 {{"urteil": "modern|in Ordnung|veraltet|sehr veraltet", "note": 0-10,
   "geschaetztes_alter": "z. B. 'Stil ca. 2008–2012' oder 'aktuell'",
-  "gut": ["…"], "schlecht": ["…"], "aufhaenger": "…" oder null}}"""
+  "gut": ["…"], "schlecht": ["…"], "aufhaenger": "…" oder null, "mail_absatz": "…" oder null}}"""
+
+# Was in einer Mail an den Inhaber nichts verloren hat
+_HARSH = re.compile(r"\b(veraltet|altmodisch|schlecht|billig|unprofessionell|hässlich|langweilig|katastroph|furchtbar|"
+                    r"bitte machen sie|sie sollten|sie müssen)", re.I)
 
 VERDICTS = {"modern", "in Ordnung", "veraltet", "sehr veraltet"}
 
@@ -314,6 +325,8 @@ def ai_assessment(review: DesignReview, mobile: dict | None, llm: LLMClient,
     review.good, review.bad = _strings(data.get("gut")), _strings(data.get("schlecht"))
     hook = data.get("aufhaenger")
     review.hook = str(hook).strip()[:300] if hook else None
+    paragraph = str(data.get("mail_absatz") or "").strip()[:700]
+    review.email_paragraph = paragraph if paragraph and not _HARSH.search(paragraph) else None
 
 
 # --------------------------------------------------------------------------- Ablauf / Speicher

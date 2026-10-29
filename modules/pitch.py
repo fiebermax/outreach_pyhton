@@ -126,19 +126,25 @@ def _join(*parts: str) -> str:
     return " ".join(p.strip() for p in parts if p and p.strip())
 
 
-def build_design_draft(domain: str, observation: str, recipient: str, sender: Sender) -> EmailDraft:
-    """Entwurf aus dem Design-Urteil (Aufhänger der Bild-KI); gleicher Rahmen wie build_draft."""
-    observation = observation.strip().rstrip(".") + "."
+def build_design_draft(domain: str, paragraph: str, recipient: str, sender: Sender,
+                       extra: str | None = None) -> EmailDraft:
+    """Entwurf aus dem Design-Urteil (höflicher Absatz der Bild-KI), optional plus ein technischer Punkt."""
+    paragraph = paragraph.strip()
+    if paragraph[-1:] not in ".!?":
+        paragraph += "."
+    extras = [extra] if extra else []
     return EmailDraft(recipient=recipient, subject=f"Ihre Website {domain}",
-                      body=_compose(domain, _sentence_start(observation), "", [], sender), finding_ids=["design_review"])
+                      body=_compose(domain, _sentence_start(paragraph), "", extras, sender, lead_in=False),
+                      finding_ids=["design_review"])
 
 
-def _compose(domain: str, first: str, hint: str, extras: list[str], sender: Sender) -> str:
+def _compose(domain: str, first: str, hint: str, extras: list[str], sender: Sender, lead_in: bool = True) -> str:
     """Ohne Selbstvorstellung: gleich zur Sache, Kontakt und Website in der Signatur."""
     lines = [
         "Guten Tag,",
         "",
-        f"beim Durchsehen von Websites aus der Region bin ich auf {domain} gestoßen. Dabei ist mir Folgendes aufgefallen:",
+        f"beim Durchsehen von Websites aus der Region bin ich auf {domain} gestoßen."
+        + (" Dabei ist mir Folgendes aufgefallen:" if lead_in else ""),
         "",
         first,
     ]
