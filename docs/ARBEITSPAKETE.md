@@ -24,6 +24,9 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 2.6 Repository-Schicht | erledigt | `tests/test_database.py` |
 | 2.7 Duplikat-Erkennung | erledigt | `tests/test_database.py` + Probelauf mit echten Places-Daten |
 | 2.8 Job-Schritte | erledigt | `tests/test_database.py` |
+| 3.1 Lokaler Testserver | erledigt | `tests/conftest.py`, `tests/fixtures/sites/` |
+| 3.2 URL-Validierung | erledigt | `core/normalize.py` + `tests/test_fetcher.py` |
+| 3.3 HTTP-Abruf | erledigt | `modules/fetcher.py`, `tests/test_fetcher.py` + Probeabruf echter Seiten |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.

@@ -67,6 +67,14 @@ class BlockedError(PermanentError):
     """Zugriff verweigert (Captcha, Bot-Schutz). Wird nie umgangen oder wiederholt."""
 
 
+class SslCertificateError(PermanentError):
+    """Zertifikat ungültig/abgelaufen. Kann selbst ein Befund sein."""
+
+
+class TooManyRedirects(PermanentError):
+    """Weiterleitungsschleife oder zu lange Kette."""
+
+
 class ContentTooLarge(PermanentError):
     """Antwort überschreitet das Größenlimit."""
 
