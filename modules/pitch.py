@@ -44,6 +44,11 @@ def _path(url: str) -> str:
     return "auf Ihrer Startseite" if not path else f"auf der Seite {path}"
 
 
+def _sentence_start(text: str) -> str:
+    """Nur den ersten Buchstaben groß – str.capitalize() würde den Rest kleinschreiben ("Auf der seite …")."""
+    return text[:1].upper() + text[1:]
+
+
 def _quote_parts(f: Finding) -> tuple[str, str | None]:
     m = re.match(r"„(.+?)“(?: → „(.+?)“)?$", f.evidence)
     return (m.group(1), m.group(2)) if m else (f.evidence, None)
@@ -56,7 +61,7 @@ def block_for(f: Finding) -> Block | None:
     if issue == "phone_not_clickable":
         number = re.sub(r"^.*?„|“.*$|\s*\(kein tel:-Link\)", "", f.evidence).strip()
         return Block(f"Telefonnummer auf {d}",
-                     f"{_path(f.source_url).capitalize()} steht Ihre Telefonnummer nur als Text "
+                     f"{_sentence_start(_path(f.source_url))} steht Ihre Telefonnummer nur als Text "
                      f"(„{number[:60]}“). Auf dem Handy lässt sie sich deshalb nicht antippen.",
                      "Gerade wer unterwegs nach einem Handwerker sucht, ruft meist direkt vom Smartphone an.",
                      "Mit einem Telefon-Link (tel:) ist das in ein paar Minuten behoben.")
@@ -141,7 +146,7 @@ def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> Emai
         return None
     (first, b1), rest = blocks[0], blocks[1:]
     domain = _domain(first.source_url)
-    observation = b1.observation[0].upper() + b1.observation[1:]
+    observation = _sentence_start(b1.observation)
     lines = [
         "Guten Tag,",
         "",

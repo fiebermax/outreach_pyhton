@@ -161,3 +161,17 @@ def test_http_redirect_probe(site_server):
             return await probe_http_redirect(result, client)
     probe = asyncio.run(run())
     assert probe["status"] == 200 and probe["final_url"].startswith("http://")
+
+
+def test_phone_only_in_impressum_is_low_relevance():
+    """Echter Fall zimmerei-gay.de: Nummer nur im Impressum unverlinkt – stimmt, ist aber kaum relevant."""
+    imp = page(url=URL + "impressum", phone_numbers=[phone(ContactOrigin.TEXT, URL + "impressum")])
+    (f,) = run_checks(site(page(), imp), ctx())
+    assert f.issue_id == "phone_not_clickable" and f.business_relevance.value == "LOW"
+
+
+def test_customer_facing_phone_preferred_over_impressum():
+    imp = page(url=URL + "impressum", phone_numbers=[phone(ContactOrigin.TEXT, URL + "impressum")])
+    kontakt = page(url=URL + "kontakt", phone_numbers=[phone(ContactOrigin.TEXT, URL + "kontakt")])
+    (f,) = run_checks(site(page(), imp, kontakt), ctx())
+    assert f.source_url == URL + "kontakt" and f.business_relevance.value == "MEDIUM"

@@ -170,11 +170,16 @@ def check_contact(result: CrawlResult, ctx: CheckContext) -> list[Finding]:
     linked = {(c.source_url, c.value) for c in phones if c.origin is ContactOrigin.LINK}
     text_only = [c for c in phones if c.origin is ContactOrigin.TEXT and (c.source_url, c.value) not in linked]
     if text_only:
-        c = text_only[0]
-        out.append(_f("phone_not_clickable", FindingCategory.CONTACT, Severity.MEDIUM,
+        # Wo Kunden anrufen (Startseite, Kontakt) zählt; im Impressum/Datenschutz ist es kaum relevant.
+        legal = re.compile(r"impressum|imprint|datenschutz|privacy|agb", re.I)
+        customer_facing = [c for c in text_only if not legal.search(c.source_url)]
+        c = customer_facing[0] if customer_facing else text_only[0]
+        relevant = bool(customer_facing)
+        out.append(_f("phone_not_clickable", FindingCategory.CONTACT, Severity.MEDIUM if relevant else Severity.LOW,
                       "Die Telefonnummer ist nicht als Link hinterlegt; auf dem Smartphone kann man sie nicht direkt antippen.",
                       f"„{c.context or c.raw}“ (kein tel:-Link)", c.source_url, EvidenceType.DIRECTLY_OBSERVED, 0.85,
-                      Severity.MEDIUM, f'Nummer als <a href="tel:{c.value}"> verlinken.', None))
+                      Severity.MEDIUM if relevant else Severity.LOW, f'Nummer als <a href="tel:{c.value}"> verlinken.',
+                      None))
     broken = [c for c in phones if c.origin is ContactOrigin.LINK and re.search(r"[\"<>]", c.raw)]
     if broken:
         c = broken[0]

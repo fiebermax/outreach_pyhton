@@ -51,6 +51,9 @@ class ScoringResult:
 def is_eligible(f: Finding) -> bool:
     if f.issue_id in NOT_PITCHABLE:
         return False
+    if f.severity is Severity.LOW and f.business_relevance is Severity.LOW and f.category not in (
+            FindingCategory.SPELLING, FindingCategory.GRAMMAR):
+        return False        # z. B. Telefonnummer nur im Impressum: stimmt, ist aber kein Gesprächsanlass
     if f.evidence_type is not EvidenceType.AI_INTERPRETATION:
         return f.confidence >= 0.6
     if f.category in (FindingCategory.SPELLING, FindingCategory.GRAMMAR):
