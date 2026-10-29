@@ -330,10 +330,13 @@ class BrowserRenderer:
             await page.screenshot(path=str(screenshot_path), full_page=True,
                                   clip={"x": 0, "y": 0, "width": viewport["width"],
                                         "height": max(viewport["height"], min(int(height or 0), max_height))})
-            if ai_jpeg_path:              # kleiner, für die Bild-KI: erster Eindruck (oberer Bereich)
-                await page.screenshot(path=str(ai_jpeg_path), type="jpeg", quality=70, full_page=True,
-                                      clip={"x": 0, "y": 0, "width": viewport["width"],
-                                            "height": max(viewport["height"], min(int(height or 0), viewport["height"] * 2))})
+            if ai_jpeg_path:              # für die Bild-KI: ganze Seite in bis zu 3 Abschnitten (von oben nach unten)
+                total, chunk = min(int(height or 0), max_height), 1100
+                for i, y in enumerate(range(0, max(total, 1), chunk)[:3], start=1):
+                    await page.screenshot(path=str(ai_jpeg_path).replace(".jpg", f"_{i}.jpg"), type="jpeg",
+                                          quality=70, full_page=True,
+                                          clip={"x": 0, "y": y, "width": viewport["width"],
+                                                "height": max(1, min(chunk, total - y)) if total else viewport["height"]})
             return page.url, data
         except PlaywrightError as exc:
             raise BrowserCrashed(f"Browserfehler: {str(exc)[:200]}") from exc

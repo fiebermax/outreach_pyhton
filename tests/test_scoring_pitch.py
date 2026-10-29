@@ -83,10 +83,10 @@ def test_draft_structure_and_lint():
     assert body.startswith("Guten Tag,")
     assert "nh-bauunternehmen.de" in body and "Telefon: 08225 12345" in body
     assert "Außerdem: im Footer Ihrer Website steht noch „© 2019“." in body
-    assert "Webdesigner hier aus Jettingen-Scheppach" in body and "keine weiteren Nachrichten" in body
+    assert "fieberki.de" in body and "keine weiteren Nachrichten" in body and "mein Name" not in body
     assert draft.finding_ids == ["phone_not_clickable", "copyright_outdated"]
     assert lint_draft(draft, [f(), COPYRIGHT], SENDER) == []
-    assert body.index("mein Name ist") < body.index("Telefon: 08225")   # persönliche Vorstellung zuerst
+    assert body.index("Dabei ist mir") < body.index("Telefon: 08225")   # gleich zur Sache
 
 
 def test_no_draft_without_usable_block():

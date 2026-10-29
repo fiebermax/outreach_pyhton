@@ -68,6 +68,55 @@ schluesselwoerter = ["bau ", "bauunternehmen", "sanierung", "hochbau", "metallba
 places_typen = ["general_contractor"]
 prioritaet = 0.6
 
+[[branche]]
+name = "Gastronomie & Hotellerie"
+suchbegriffe = ["Restaurant", "Hotel"]
+schluesselwoerter = ["restaurant", "gasthof", "gasthaus", "hotel", "pension", "café", "cafe", "pizzeria", "wirtshaus", "biergarten"]
+places_typen = ["restaurant", "hotel", "cafe", "lodging"]
+prioritaet = 0.8
+
+[[branche]]
+name = "Landwirtschaft & Lohnunternehmen"
+suchbegriffe = ["Lohnunternehmen", "Landwirtschaft"]
+schluesselwoerter = ["lohnunternehm", "landwirtschaft", "agrar", "hofladen", "landtechnik"]
+places_typen = ["farm"]
+prioritaet = 0.7
+
+[[branche]]
+name = "Kanzleien & Beratung"
+suchbegriffe = ["Steuerberater", "Rechtsanwalt"]
+schluesselwoerter = ["steuerberat", "kanzlei", "rechtsanw", "anwalt", "notar", "unternehmensberatung"]
+places_typen = ["lawyer", "accounting"]
+prioritaet = 0.8
+
+[[branche]]
+name = "Praxen & Gesundheit"
+suchbegriffe = ["Physiotherapie", "Zahnarzt"]
+schluesselwoerter = ["praxis", "physio", "zahnarzt", "arzt", "therapie", "heilpraktiker", "osteopath", "logopäd"]
+places_typen = ["doctor", "dentist", "physiotherapist"]
+prioritaet = 0.8
+
+[[branche]]
+name = "Handel & E-Commerce"
+suchbegriffe = ["Fachgeschäft", "Onlineshop"]
+schluesselwoerter = ["fachgeschäft", "handel", "boutique", "shop"]
+places_typen = ["clothing_store", "store"]
+prioritaet = 0.5
+
+[[branche]]
+name = "Industrie & Produktion"
+suchbegriffe = ["Maschinenbau", "Metallverarbeitung"]
+schluesselwoerter = ["maschinenbau", "fertigung", "cnc", "produktion", "werkzeugbau", "kunststoff", "metallverarbeitung"]
+places_typen = []
+prioritaet = 0.6
+
+[[branche]]
+name = "Immobilien & Verwaltung"
+suchbegriffe = ["Immobilienmakler", "Hausverwaltung"]
+schluesselwoerter = ["immobilien", "hausverwaltung", "makler"]
+places_typen = ["real_estate_agency"]
+prioritaet = 0.7
+
 [ausschluss]
 # Ketten, Baumärkte, Großunternehmen: kein Bedarf an einem regionalen Webdesigner
 namen_enthalten = ["bauhaus", "obi ", "hornbach", "toom", "hagebau", "globus baumarkt", "würth", "ikea"]

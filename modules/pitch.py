@@ -24,7 +24,7 @@ class Sender:
     region: str = "Jettingen-Scheppach"
     email: str | None = None
     phone: str | None = None
-    website: str | None = None
+    website: str | None = "fieberki.de"
 
 
 @dataclass(frozen=True)
@@ -134,12 +134,11 @@ def build_design_draft(domain: str, observation: str, recipient: str, sender: Se
 
 
 def _compose(domain: str, first: str, hint: str, extras: list[str], sender: Sender) -> str:
+    """Ohne Selbstvorstellung: gleich zur Sache, Kontakt und Website in der Signatur."""
     lines = [
         "Guten Tag,",
         "",
-        f"mein Name ist {sender.name}, ich bin Webdesigner hier aus {sender.region}. Beim Durchsehen von Websites "
-        f"aus der Gegend bin ich auf {domain} gestoßen, und mir ist etwas aufgefallen, das ich Ihnen gern "
-        "kurz weitergeben möchte:",
+        f"beim Durchsehen von Websites aus der Region bin ich auf {domain} gestoßen. Dabei ist mir Folgendes aufgefallen:",
         "",
         first,
     ]
@@ -147,15 +146,10 @@ def _compose(domain: str, first: str, hint: str, extras: list[str], sender: Send
         lines += ["", hint]
     for extra in extras:
         lines += ["", f"Außerdem: {extra}"]
-    lines += [
-        "",
-        "Wenn Sie das angehen möchten, helfe ich Ihnen gern dabei – eine kurze Antwort auf diese Mail oder ein "
-        "Anruf genügt. Und falls nicht, nehmen Sie den Hinweis einfach so mit.",
-        "",
-        f"Viele Grüße aus {sender.region}",
-        sender.name,
-        sender.tagline,
-    ]
+    closing = "Wenn Sie das ändern möchten, unterstütze ich Sie gern – eine kurze Antwort auf diese Mail genügt."
+    if sender.website:
+        closing += f" Beispiele meiner Arbeit finden Sie auf {sender.website}."
+    lines += ["", closing, "", "Viele Grüße", sender.name, sender.tagline]
     lines += [x for x in (sender.phone, sender.email, sender.website) if x]
     lines += ["", "Falls Sie keine weiteren Nachrichten von mir möchten, genügt eine kurze Antwort."]
     return "\n".join(lines)

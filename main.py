@@ -59,7 +59,8 @@ def apply_overrides(niche: NicheProfile, ort: str | None, branche: str | None) -
 
 
 def make_sender(settings: Settings, niche: NicheProfile) -> Sender:
-    return Sender(name=settings.sender_name, region=niche.region.ort, email=settings.sender_address)
+    return Sender(name=settings.sender_name, region=niche.region.ort, email=settings.sender_address,
+                  website=settings.sender_website)
 
 
 def make_llm(settings: Settings, model: str | None = None):

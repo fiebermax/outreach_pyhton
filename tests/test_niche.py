@@ -54,7 +54,7 @@ def test_priority_breaks_ties(niche):
 
 def test_town_name_not_misread(niche):
     assert classify(niche, "Elektro Müller Bad Wörishofen").branche == "Elektro"
-    assert classify(niche, "Café Bad Wörishofen").branche is None
+    assert classify(niche, "Café Bad Wörishofen").branche == "Gastronomie & Hotellerie"   # „Bad“ ≠ Bau
 
 
 @pytest.mark.parametrize("name,types", [("Hornbach Baumarkt Ulm", []), ("BAUHAUS Augsburg", []),
@@ -72,7 +72,7 @@ def test_search_queries_core_first(niche):
     queries = niche.search_queries()
     assert queries[0] == ("Schreiner/Tischler", "Schreinerei in Jettingen-Scheppach")
     assert ("Bau/Sanierung", "Bauunternehmen in Krumbach") in queries
-    assert queries[-1][0] == "Bau/Sanierung"                              # niedrigste Priorität zuletzt
+    assert queries[-1][0] == "Handel & E-Commerce"                        # niedrigste Priorität zuletzt
     assert len(queries) == len({q for _, q in queries})
 
 

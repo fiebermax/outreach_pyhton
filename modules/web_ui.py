@@ -131,17 +131,66 @@ def render_index(db: Database, settings: Settings, ai_available: bool) -> bytes:
                 f"name='max' value='4' min='1' max='30'></label><label><input type='checkbox' name='design' checked> "
                 f"Design prüfen</label><button>Suche starten</button></form>"
                 + (f"<p><a href='/lauf'>Läuft gerade … Fortschritt ansehen</a></p>" if JOB["running"] else "")
-                + f"<br><form method='post' action='/postfach' style='display:inline'><button class='btn light'>"
+                + f"<br><form method='post' action='/scan' style='display:inline'><button class='btn light'>"
+                f"Alle „manuell prüfen“ scannen</button></form> "
+                + f"<form method='post' action='/postfach' style='display:inline'><button class='btn light'>"
                 f"Postfach abgleichen (gesendet / Antworten)</button></form> <span class='muted'>{_e(NOTICE['text'])}"
                 f"</span></div>")
-    body = (run_card + f"<div class='card'><h1>Website prüfen</h1><div class='muted'>Macht Screenshots (Computer + Handy) und "
+    contacts_card = ("<div class='card'><h2>Bisherige Kontakte abgleichen</h2><div class='muted'>CSV mit Spalten "
+                     "firma;website;email;datum;kanal;ergebnis;notiz (Vorlage: docs/kontakte_vorlage.csv). Danach "
+                     "zeigt jede Firma, ob du sie schon angeschrieben hast, und es entsteht kein doppelter Entwurf."
+                     "</div><form method='post' action='/kontakte'><input type='file' accept='.csv,.txt' onchange=\""
+                     "const f=this.files[0];if(f){const r=new FileReader();r.onload=e=>{this.form.csv.value="
+                     "e.target.result};r.readAsText(f)}\"><br><br><textarea name='csv' rows='4' placeholder='oder hier "
+                     "einfügen'></textarea><br><br><button>Abgleichen</button></form></div>")
+    body = (run_card + contacts_card + f"<div class='card'><h1>Website prüfen</h1><div class='muted'>Macht Screenshots (Computer + Handy) und "
             f"beurteilt das Design: veraltet, unattraktiv, nicht fürs Handy gemacht? {_e(ai_note)}</div>"
             f"{_check_form()}</div>"
             f"<div class='card'><h2>Firmen ({len(firms)}, davon {manual} manuell prüfen)</h2>{table}</div>")
     return _page("Website-Check", body)
 
 
-def render_report(review: DesignReview) -> bytes:
+def _sender(settings: Settings):
+    from modules.pitch import Sender
+    return Sender(name=settings.sender_name, region=load_niche().region.ort, email=settings.sender_address,
+                  website=settings.sender_website)
+
+
+def _contact_status(db: Database, cid: int | None) -> str:
+    """Abgleich mit der eigenen Kontakthistorie: schon angeschrieben?"""
+    if cid is None:
+        return "<p class='pill no'>Noch nie kontaktiert (nicht in der Datenbank)</p>"
+    history = db.contact_history(cid)
+    if not history:
+        return "<p class='pill no'>Noch nie kontaktiert</p>"
+    last = history[-1]
+    return (f"<p class='pill yes'>Schon kontaktiert: {_e(last['occurred_at'][:10])} per {_e(last['channel'])} → "
+            f"{_e(MAIL_STATE.get(last['outcome'], last['outcome']))} ({len(history)}×)</p>")
+
+
+def render_mail_card(db: Database, settings: Settings, review: DesignReview) -> str:
+    from modules.pitch import build_design_draft
+    from services.outreach_service import choose_recipient
+    row = db.conn.execute("SELECT id FROM companies WHERE domain = ?", (review.domain,)).fetchone()
+    cid = row["id"] if row else None
+    recipient = (choose_recipient(db, cid) if cid else None) or ""
+    observation = review.hook or (review.bad[0] if review.bad else "")
+    if not observation:
+        return ""
+    try:
+        draft = build_design_draft(review.domain, observation, recipient or f"info@{review.domain}", _sender(settings))
+    except ValueError:                     # Domain ohne gültige Adresse (z. B. IP)
+        return ""
+    return (f"<div class='card'><h2>E-Mail</h2>{_contact_status(db, cid)}"
+            f"<form method='post' action='/bericht_entwurf'><input type='hidden' name='domain' value='{_e(review.domain)}'>"
+            f"<input type='hidden' name='url' value='{_e(review.final_url or review.url)}'>"
+            f"<label>An<input type='text' name='empfaenger' value='{_e(recipient)}' placeholder='info@{_e(review.domain)}'>"
+            f"</label><br><br><label>Betreff<input type='text' name='betreff' value='{_e(draft.subject)}'></label><br><br>"
+            f"<textarea name='text' rows='16'>{_e(draft.body)}</textarea><br><br>"
+            f"<button>Als Entwurf speichern</button></form></div>")
+
+
+def render_report(review: DesignReview, mail_card: str = "") -> bytes:
     d = quote(review.domain)
     tone = "bad" if review.verdict in ("veraltet", "sehr veraltet") else "ok"
     shots = ""
@@ -165,7 +214,7 @@ def render_report(review: DesignReview) -> bytes:
         + f"<div class='muted'>{source}</div><br><div class='cols'><div><h2>Schlecht</h2><ul class='bad'>{bad}</ul></div>"
         f"<div><h2>Gut</h2><ul class='good'>{good}</ul></div></div>"
         + (f"<br><div class='hook'><strong>Aufhänger fürs Gespräch:</strong> {_e(review.hook)}</div>" if review.hook else "")
-        + f"</div><div class='card'><h2>Screenshots</h2><div class='shots'>{shots or '–'}</div></div>"
+        + f"</div>{mail_card}<div class='card'><h2>Screenshots</h2><div class='shots'>{shots or '–'}</div></div>"
         f"<div class='card'><details><summary>Messwerte</summary><pre>"
         f"{_e(json.dumps(review.signals, ensure_ascii=False, indent=2))}</pre></details></div>")
     return _page(f"Design: {review.domain}", body)
@@ -257,6 +306,26 @@ def run_job(settings: Settings, ort: str, branche: str, max_queries: int, design
         JOB["running"] = False
 
 
+def run_scan(settings: Settings, llm_factory: Callable[[], LLMClient | None]) -> None:
+    """Design-Prüfung für alle Firmen, die ich noch manuell prüfen muss (ohne Bericht). Im Hintergrund."""
+    JOB.update(running=True, lines=[])
+    db = Database(settings.database_path)
+    try:
+        rows = [r for r in collect_rows(db, settings.data_dir)[0]
+                if r[COL["Manuell prüfen"]] == "Ja" and (r[COL["Website"]] or "").startswith("http")
+                and load_review(settings.data_dir, domain_for(r[COL["Website"]])) is None]
+        JOB["lines"].append(f"Design-Prüfung für {len(rows)} Websites …")
+        for r in rows:
+            review = asyncio.run(review_site(r[COL["Website"]], settings.data_dir, llm_factory()))
+            JOB["lines"].append(f"{r[COL['Firma']]}: {review.summary}" + (f" ({review.error})" if review.error else ""))
+        JOB["lines"].append("Fertig.")
+    except Exception as exc:
+        JOB["lines"].append(f"Abgebrochen: {type(exc).__name__}: {exc}")
+    finally:
+        db.close()
+        JOB["running"] = False
+
+
 def render_job() -> bytes:
     refresh = "<meta http-equiv='refresh' content='3'>" if JOB["running"] else ""
     state = "läuft …" if JOB["running"] else "fertig"
@@ -303,7 +372,11 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
                 if review is None:
                     return self._send(404, _page("Nicht gefunden", "<div class='card'>Kein Bericht. "
                                                                    "<a href='/'>Zur Übersicht</a></div>"))
-                return self._send(200, render_report(review))
+                db = Database(settings.database_path)
+                try:
+                    return self._send(200, render_report(review, render_mail_card(db, settings, review)))
+                finally:
+                    db.close()
             if parts.path == "/datei":
                 name = q.get("f", "")
                 if name not in SCREENSHOTS or not q.get("d"):
@@ -334,6 +407,24 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
                         settings, form.get("ort", "").strip(), form.get("branche", ""),
                         max(1, min(30, int(form.get("max") or 4))), "design" in form, llm_factory)).start()
                 return self._send(303, headers={"Location": "/lauf"})
+            if path == "/scan":
+                if not JOB["running"]:
+                    threading.Thread(target=run_scan, args=(settings, llm_factory), daemon=True).start()
+                return self._send(303, headers={"Location": "/lauf"})
+            if path == "/kontakte":
+                from modules.contact_import import import_contacts
+                db = Database(settings.database_path)
+                try:
+                    r = import_contacts(db, form.get("csv", ""))
+                    NOTICE["text"] = (f"Kontakte abgeglichen: {r.imported} übernommen ({r.matched_existing} bekannte "
+                                      f"Firmen, {r.created} neu)" + (f", {len(r.errors)} Fehler" if r.errors else ""))
+                except Exception as exc:
+                    NOTICE["text"] = f"Kontakte-Import fehlgeschlagen: {exc}"
+                finally:
+                    db.close()
+                return self._send(303, headers={"Location": "/"})
+            if path == "/bericht_entwurf":
+                return self._report_draft(form)
             if path == "/postfach":
                 from modules.mailbox import sync
                 db = Database(settings.database_path)
@@ -357,9 +448,32 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
             review = asyncio.run(review_site(url, settings.data_dir, llm_factory()))
             return self._send(303, headers={"Location": f"/bericht?d={quote(review.domain)}"})
 
+        def _report_draft(self, form: dict):
+            from core.errors import SendNotAllowed
+            from models.schemas import EmailDraft, Lead
+            from modules.mailer import save_draft
+            domain, url, cid = form.get("domain", ""), form.get("url", ""), None
+            db = Database(settings.database_path)
+            try:
+                row = db.conn.execute("SELECT id FROM companies WHERE domain = ?", (domain,)).fetchone()
+                cid = row["id"] if row else db.upsert_company(Lead(name=domain, website=url, source="manual",
+                                                                    source_ref=domain)).company_id
+                draft = EmailDraft(recipient=form.get("empfaenger", "").strip(), subject=form.get("betreff", ""),
+                                   body=form.get("text", ""), finding_ids=["design_review"])
+                save_draft(db, cid, draft, settings)
+                NOTICE["text"] = "Entwurf gespeichert."
+            except SendNotAllowed as exc:
+                NOTICE["text"] = f"Nicht gespeichert: {exc}"
+            except Exception as exc:
+                NOTICE["text"] = f"Nicht gespeichert: {exc}"
+                return self._send(303, headers={"Location": f"/bericht?d={quote(domain)}"})
+            finally:
+                db.close()
+            return self._send(303, headers={"Location": f"/firma?id={cid}"})
+
         def _company_action(self, form: dict):
             from modules.mailer import build_message, save_draft
-            from modules.pitch import Sender, build_design_draft, lint_draft
+            from modules.pitch import build_design_draft, lint_draft
             from models.schemas import EmailDraft
             from services.outreach_service import choose_recipient
             cid, action = int(form.get("id", 0)), form.get("aktion", "")
@@ -391,8 +505,7 @@ def make_handler(settings: Settings, llm_factory: Callable[[], LLMClient | None]
                     review = load_review(settings.data_dir, domain_for(c["website"]))
                     recipient = choose_recipient(db, cid)
                     if review and review.hook and recipient:
-                        sender = Sender(name=settings.sender_name, region=load_niche().region.ort,
-                                        email=settings.sender_address)
+                        sender = _sender(settings)
                         new = build_design_draft(review.domain, review.hook, recipient, sender)
                         # Zahlen stammen aus dem Design-Urteil (z. B. „14 px“), nicht erfunden
                         problems = [x for x in lint_draft(new, [], sender) if not x.startswith("unbelegte Zahl")]

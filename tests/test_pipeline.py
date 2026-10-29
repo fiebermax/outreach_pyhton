@@ -78,7 +78,7 @@ def test_full_pipeline(env):
     assert row["recipient"] == "info@schreinerei-beispiel.de" and row["status"] == "draft"
     msg = email.message_from_bytes((settings.data_dir / row["eml_path"]).read_bytes())
     body = msg.get_payload(decode=True).decode()
-    assert "keine weiteren Nachrichten" in body and "Webdesigner" in body
+    assert "keine weiteren Nachrichten" in body and "fieberki.de" in body
     assert any("ausgeschlossen" in d and "Profil Maler" in d for d in scored.details)
 
 

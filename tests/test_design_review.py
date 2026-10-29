@@ -34,7 +34,7 @@ def test_old_site_is_flagged_without_ai(site_server, tmp_path):
                  "Copyright-Jahr 2009", "Besucher Nr"):
         assert part in flags, part
     assert (tmp_path / "design" / "127.0.0.1" / "desktop.png").stat().st_size > 1000
-    assert (tmp_path / "design" / "127.0.0.1" / "mobile.png").stat().st_size > 1000
+    assert (tmp_path / "design" / "127.0.0.1" / "desktop_ai_1.jpg").exists()
     assert load_review(tmp_path, "127.0.0.1").verdict == "sehr veraltet"      # gespeichert und wieder lesbar
 
 
@@ -53,7 +53,7 @@ def test_ai_verdict_is_used_and_prompt_is_design_only(site_server, tmp_path):
     assert r.bad == ["Tabellenlayout", "nicht fürs Handy"] and r.hook.startswith("Ihre Seite")
     system, user = llm.prompts[0]
     assert "Tippfehler" in system and "NICHT dein Thema" in system
-    assert len(llm.images) == 2 and llm.images[0][:2] == b"\xff\xd8"          # Screenshots als JPEG an die KI
+    assert 1 <= len(llm.images) <= 3 and all(i[:2] == b"\xff\xd8" for i in llm.images)   # ganze Seite als JPEGs
     assert "layout_tables" in user and "Schreinerei Huber" in user
 
 

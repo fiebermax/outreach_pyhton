@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     sender_address: str | None = None
     sender_name: str = "Maximilian Fieber"
+    sender_website: str | None = "fieberki.de"
     # Postfach-Abgleich (IONOS: imap.ionos.de, Gmail: imap.gmail.com + App-Passwort)
     imap_host: str | None = None
     imap_port: int = Field(993, ge=1, le=65535)

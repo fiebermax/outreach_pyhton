@@ -245,7 +245,8 @@ def verdict_from_points(points: int) -> tuple[str, int]:
 # --------------------------------------------------------------------------- KI
 
 SYSTEM_PROMPT = """Du bist ein strenger, erfahrener Webdesigner. Du siehst Screenshots einer Website eines kleinen
-Handwerksbetriebs (Bild 1: Computer, Bild 2: Handy) und beurteilst NUR das Design: Wirkt sie heute modern und
+Handwerksbetriebs am Computer – die ganze Seite von oben nach unten, aufgeteilt in mehrere Bilder – und
+beurteilst NUR das Design: Wirkt sie heute modern und
 vertrauenswürdig – oder veraltet, billig, unübersichtlich, schlecht fürs Handy?
 
 Bewertungsmaßstab (note 0–10), sei ehrlich und streng:
@@ -334,6 +335,8 @@ async def review_site(url: str, data_dir: Path, llm: LLMClient | None = None, *,
     domain = domain_for(url)
     folder = review_dir(data_dir, domain)
     folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob("*_ai*.jpg"):                 # alte Abschnitte nicht mitschicken
+        old.unlink()
     review = DesignReview(url=url, domain=domain)
     mobile = None
     try:
@@ -341,9 +344,7 @@ async def review_site(url: str, data_dir: Path, llm: LLMClient | None = None, *,
             review.final_url, signals = await browser.capture(url, DESKTOP, folder / "desktop.png", _SIGNALS_JS,
                                                               ai_jpeg_path=folder / "desktop_ai.jpg")
             review.desktop_png = "desktop.png"
-            _, mobile = await browser.capture(url, MOBILE, folder / "mobile.png", _MOBILE_JS,
-                                              ai_jpeg_path=folder / "mobile_ai.jpg")
-            review.mobile_png = "mobile.png"
+            _, mobile = await browser.capture(url, MOBILE, folder / "mobile.png", _MOBILE_JS)   # nur Messwerte
     except OutreachError as exc:
         review.error = f"Seite nicht ladbar: {type(exc).__name__}: {exc}"
         save_review(review, data_dir)
@@ -354,7 +355,7 @@ async def review_site(url: str, data_dir: Path, llm: LLMClient | None = None, *,
     review.red_flags, review.positives, points = rate_signals(review.signals, mobile)
     review.verdict, review.grade = verdict_from_points(points)
     if llm is not None:
-        images = [(folder / n).read_bytes() for n in ("desktop_ai.jpg", "mobile_ai.jpg") if (folder / n).exists()]
+        images = [path.read_bytes() for path in sorted(folder.glob("desktop_ai_*.jpg"))]
         ai_assessment(review, mobile, llm, images)
     if not review.bad:
         review.bad = list(review.red_flags)
