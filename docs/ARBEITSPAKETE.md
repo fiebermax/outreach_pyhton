@@ -51,6 +51,11 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 5.7 Verzeichnisprofile | erledigt | `website_kind` = own / directory / none |
 | 5.8 Nische anwenden | erledigt | Branche, Passung, Umkreis, Lauf- und Monatslimit |
 | 6.1–6.8 Deterministische Prüfungen | erledigt | `modules/website_checks.py`, `tests/test_website_checks.py` – 17 Befundtypen, alle mit Beleg |
+| 6.9 LLM-Client | erledigt | `modules/llm.py` – DeepSeek, austauschbar, Kostenlimit |
+| 6.10 Injection-Schutz | erledigt | `tests/test_analyzer.py` |
+| 6.11 Belegprüfung | erledigt | Zitat muss im Text stehen; 3 echte Websites händisch bewertet |
+| 6.12 Robustheit | erledigt | ein Reparaturversuch bei kaputtem JSON |
+| 6.13 Analyzer | erledigt | `modules/analyzer.py` |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,

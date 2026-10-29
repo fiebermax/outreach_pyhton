@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com"
     ai_max_cost_eur: float = Field(2.0, ge=0)
+    # Annahme, bitte mit der aktuellen DeepSeek-Preisliste abgleichen (€ pro 1 Mio. Token)
+    deepseek_price_input_per_mtok_eur: float = Field(0.30, ge=0)
+    deepseek_price_output_per_mtok_eur: float = Field(1.20, ge=0)
 
     # --- E-Mail ---
     mail_mode: MailMode = MailMode.DRAFT

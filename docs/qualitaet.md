@@ -111,3 +111,19 @@ Die Wortgrenze von 150 bei Regel 1, 2 und 6 verhindert Fehlalarme: Eine lange Se
   (41 Wörter, `PARTIAL_SUCCESS`) – Fehlurteil, behoben. Diagnose: Startseite hat auch nach
   Zustimmung nur 3 Wörter und 6 Bilder. Die Statusmeldung behauptet deshalb keine Ursache,
   sondern nennt nur das Gemessene.
+
+## KI-Analyse – erste echte Ergebnisse (DeepSeek, 29.10.2026)
+
+3 Websites, Kosten nach Annahme-Preisen zusammen ca. 0,003 €. Jeder Befund händisch bewertet:
+
+| Website | KI-Befund | Bewertung |
+|---|---|---|
+| nh-bauunternehmen.de | „Innen-AuBenputz“ → „Innen-Außenputz“ (Überschrift) | echt, im Quelltext bestätigt |
+| zimmerei-gay.de/leistungen | „Glas uns Acrylglas“ → „Glas und Acrylglas“ | echt, im gerenderten DOM bestätigt (nur per JS sichtbar) |
+| nh-bauunternehmen.de | „Inhaber:Nexhat“ ohne Leerzeichen | echt, aber belanglos (Impressum) |
+| maler-farbtec.de | Startseite nennt keine konkreten Malerleistungen | plausible Einschätzung |
+| 3 weitere (Verständlichkeit/Widerspruch) | „energetisieren“, „Sonstiges“, Kommasetzung | Stil/schwach, Sicherheit 0,5–0,6 |
+
+Folgerungen: Rechtschreibbefunde mit exaktem Zitat sind belastbar. Einschätzungen
+(CLARITY/CONSISTENCY) sind schwächer und dürfen im Scoring nur gering zählen.
+Gefundener Fehler im eigenen Filter: „Umsatzsteuer-ID“ wurde als Umsatzbehauptung verworfen – behoben.
