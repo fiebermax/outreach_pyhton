@@ -85,7 +85,7 @@ def _check_form(url: str = "", label: str = "Screenshot & Design prüfen") -> st
 def render_index(db: Database, settings: Settings, ai_available: bool) -> bytes:
     firms, _ = collect_rows(db, settings.data_dir)
     manual = sum(1 for r in firms if r[COL["Manuell prüfen"]] == "Ja")
-    ai_note = ("Das Urteil schreibt DeepSeek anhand gemessener Design-Signale (die API kann keine Bilder ansehen)."
+    ai_note = ("Das Urteil schreibt DeepSeek nach Ansicht der Screenshots."
                if ai_available else "DEEPSEEK_API_KEY fehlt – das Urteil kommt nur aus den festen Regeln.")
     rows = []
     for r in firms:
@@ -125,8 +125,8 @@ def render_report(review: DesignReview) -> bytes:
                       f"</div></div>")
     bad = "".join(f"<li>{_e(x)}</li>" for x in review.bad) or "<li>nichts Auffälliges</li>"
     good = "".join(f"<li>{_e(x)}</li>" for x in review.good) or "<li>–</li>"
-    source = (f"Urteil: DeepSeek ({_e(review.ai_model)}), auf Basis gemessener Signale – den Screenshot "
-              "selbst kann die KI nicht sehen." if review.ai_model else "Urteil aus festen Regeln (ohne KI).")
+    source = (f"Urteil: DeepSeek ({_e(review.ai_model)}) nach Ansicht der Screenshots."
+              if review.ai_model else "Urteil aus festen Regeln (ohne KI).")
     body = (
         f"<div class='card'><div class='muted'><a href='/'>← Übersicht</a></div>"
         f"<h1>{_e(review.domain)}</h1><div class='muted'><a href='{_e(review.final_url or review.url)}' target=_blank "

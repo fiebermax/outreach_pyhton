@@ -137,8 +137,9 @@ def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> Emai
     lines = [
         "Guten Tag,",
         "",
-        f"ich habe mir Websites von Betrieben aus der Region angesehen und bin dabei auf {domain} gestoßen. "
-        "Eine Sache ist mir aufgefallen:",
+        f"mein Name ist {sender.name}, ich bin Webdesigner hier aus {sender.region}. Beim Durchsehen von Websites "
+        f"aus der Gegend bin ich auf {domain} gestoßen, und mir ist etwas aufgefallen, das ich Ihnen gern "
+        "kurz weitergeben möchte:",
         "",
         _join(observation, b1.why),
     ]
@@ -149,10 +150,10 @@ def build_draft(findings: list[Finding], recipient: str, sender: Sender) -> Emai
         lines += ["", f"Außerdem: {extra}"]
     lines += [
         "",
-        f"Kurz zu mir: Ich bin Webdesigner aus {sender.region} und kümmere mich um genau solche Dinge. "
-        "Wenn Sie dabei Unterstützung möchten, melden Sie sich gern. Ansonsten nehmen Sie den Hinweis einfach so mit.",
+        "Wenn Sie das angehen möchten, helfe ich Ihnen gern dabei – eine kurze Antwort auf diese Mail oder ein "
+        "Anruf genügt. Und falls nicht, nehmen Sie den Hinweis einfach so mit.",
         "",
-        "Viele Grüße",
+        f"Viele Grüße aus {sender.region}",
         sender.name,
         sender.tagline,
     ]

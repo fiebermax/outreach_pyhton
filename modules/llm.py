@@ -7,6 +7,7 @@ keine fest eingebauten Fakten. Vor jedem Aufruf wird das Kostenlimit geprüft.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass
@@ -32,7 +33,8 @@ class Usage:
 class LLMClient(Protocol):
     model: str
 
-    def complete_json(self, system: str, user: str, max_tokens: int = 1500) -> tuple[dict, Usage]:
+    def complete_json(self, system: str, user: str, max_tokens: int = 1500,
+                      images: list[bytes] | None = None) -> tuple[dict, Usage]:
         """Liefert ein JSON-Objekt. Wirft InvalidResponseError, wenn keins zurückkommt."""
 
 
@@ -98,11 +100,18 @@ class DeepSeekClient:
         except ValueError as exc:
             raise InvalidResponseError("DeepSeek-Antwort ist kein JSON") from exc
 
-    def complete_json(self, system: str, user: str, max_tokens: int = 1500) -> tuple[dict, Usage]:
+    def complete_json(self, system: str, user: str, max_tokens: int = 1500,
+                      images: list[bytes] | None = None) -> tuple[dict, Usage]:
+        """`images` (JPEG/PNG) nur mit einem Bild-Modell, z. B. deepseek-flash."""
         self.tracker.check()
+        content: str | list = user
+        if images:
+            content = [{"type": "text", "text": user}] + [
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(img).decode()}}
+                for img in images]
         payload = {
             "model": self.model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
             "response_format": {"type": "json_object"},
             "temperature": 0.0,
             "max_tokens": max_tokens,

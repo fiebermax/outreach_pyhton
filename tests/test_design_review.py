@@ -16,8 +16,9 @@ class FakeLLM:
     def __init__(self, answer):
         self.answer, self.prompts = answer, []
 
-    def complete_json(self, system, user, max_tokens=1500):
+    def complete_json(self, system, user, max_tokens=1500, images=None):
         self.prompts.append((system, user))
+        self.images = images
         return self.answer, Usage(100, 50, 0.001)
 
 
@@ -52,6 +53,7 @@ def test_ai_verdict_is_used_and_prompt_is_design_only(site_server, tmp_path):
     assert r.bad == ["Tabellenlayout", "nicht fürs Handy"] and r.hook.startswith("Ihre Seite")
     system, user = llm.prompts[0]
     assert "Tippfehler" in system and "NICHT dein Thema" in system
+    assert len(llm.images) == 2 and llm.images[0][:2] == b"\xff\xd8"          # Screenshots als JPEG an die KI
     assert "layout_tables" in user and "Schreinerei Huber" in user
 
 

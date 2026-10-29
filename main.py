@@ -62,12 +62,12 @@ def make_sender(settings: Settings, niche: NicheProfile) -> Sender:
     return Sender(name=settings.sender_name, region=niche.region.ort, email=settings.sender_address)
 
 
-def make_llm(settings: Settings):
+def make_llm(settings: Settings, model: str | None = None):
     if settings.deepseek_api_key is None:
         log.warning("DEEPSEEK_API_KEY fehlt – Analyse nur mit deterministischen Prüfungen")
         return None
     from modules.llm import CostTracker, DeepSeekClient
-    return DeepSeekClient(settings.require_secret("deepseek_api_key"), model=settings.deepseek_model,
+    return DeepSeekClient(settings.require_secret("deepseek_api_key"), model=model or settings.deepseek_model,
                           base_url=settings.deepseek_base_url, tracker=CostTracker(settings.ai_max_cost_eur),
                           price_input_per_mtok_eur=settings.deepseek_price_input_per_mtok_eur,
                           price_output_per_mtok_eur=settings.deepseek_price_output_per_mtok_eur)
@@ -161,7 +161,7 @@ def cmd_export(db: Database, settings: Settings, niche: NicheProfile, args) -> N
 
 def cmd_ui(db: Database, settings: Settings, niche: NicheProfile, args) -> None:
     from modules.web_ui import serve
-    serve(settings, lambda: make_llm(settings), port=args.port, open_browser=not args.no_browser)
+    serve(settings, lambda: make_llm(settings, settings.deepseek_vision_model), port=args.port, open_browser=not args.no_browser)
 
 
 def cmd_retry(db: Database, settings: Settings, niche: NicheProfile, args) -> None:

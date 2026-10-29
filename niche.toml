@@ -10,6 +10,9 @@ ort = "Jettingen-Scheppach"
 # Weitere Orte, die mit abgesucht werden (gleiche Branchenliste)
 weitere_orte = ["Burgau", "Günzburg", "Ichenhausen", "Zusmarshausen", "Dinkelscherben", "Krumbach"]
 radius_km = 20
+# Heimat-Koordinaten (Jettingen-Scheppach): Ortsnamen werden in der Nähe gesucht
+lat = 48.4085
+lng = 10.4452
 
 [suche]
 max_treffer_pro_suche = 20    # Google liefert max. 20 pro Seite

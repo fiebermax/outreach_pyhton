@@ -104,8 +104,13 @@ class GooglePlacesClient:
         if used >= self.config.monthly_limit:
             raise BudgetExhausted(f"Monatslimit erreicht ({used}/{self.config.monthly_limit} Abfragen)")
 
-    def search_text(self, query: str, page_size: int = 20, page_token: str | None = None) -> dict:
+    def search_text(self, query: str, page_size: int = 20, page_token: str | None = None,
+                    near: tuple[float, float, float] | None = None) -> dict:
+        """`near` = (lat, lng, Radius km): Treffer in diesem Umkreis bevorzugen."""
         body = {"textQuery": query, "pageSize": page_size, "languageCode": "de", "regionCode": "DE"}
+        if near:
+            body["locationBias"] = {"circle": {"center": {"latitude": near[0], "longitude": near[1]},
+                                                "radius": min(50_000.0, near[2] * 1000)}}
         if page_token:
             body["pageToken"] = page_token
         key = "places:" + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
@@ -141,9 +146,9 @@ class GooglePlacesClient:
         self.db.cache_put(key, PROVIDER, json.dumps(data))
         return data
 
-    def locate(self, place_name: str) -> tuple[float, float] | None:
-        """Koordinaten eines Ortes (für den Umkreisfilter) über dieselbe Suche, ebenfalls gecacht."""
-        places = self.search_text(place_name, page_size=1).get("places", [])
+    def locate(self, place_name: str, near: tuple[float, float] | None = None) -> tuple[float, float] | None:
+        """Koordinaten eines Ortes (für den Umkreisfilter), bevorzugt in der Nähe von `near`. Gecacht."""
+        places = self.search_text(place_name, page_size=1, near=(*near, 50) if near else None).get("places", [])
         loc = places[0].get("location") if places else None
         return (loc["latitude"], loc["longitude"]) if loc else None
 
@@ -170,20 +175,25 @@ def find_leads(db: Database, client: GooglePlacesClient, niche: NicheProfile, *,
     """Führt die Nischen-Suchanfragen aus und speichert passende Unternehmen. Fehler stoppen nur die Anfrage."""
     report = FinderReport()
     try:
-        center = client.locate(niche.region.ort)
+        home = (niche.region.lat, niche.region.lng) if niche.region.lat is not None else None
+        center = client.locate(niche.region.ort, near=home)
     except OutreachError as exc:
         report.errors.append(f"Ort {niche.region.ort} nicht auffindbar: {exc}")
         report.stopped_reason = str(exc)
         return report
     if center is None:
         report.errors.append(f"Ort {niche.region.ort} nicht gefunden – Umkreisfilter deaktiviert")
+    elif home and haversine_km(*home, *center) > 100:
+        report.errors.append(f"Achtung: „{niche.region.ort}“ liegt {haversine_km(*home, *center):.0f} km von zu Hause "
+                             "entfernt – falscher Ort? Genauer angeben, z. B. mit PLZ.")
 
     queries = niche.search_queries()[: max_queries or None]
     for branche, query in queries:
         token = None
         for _page in range(niche.suche.max_seiten_pro_suche):
             try:
-                data = client.search_text(query, niche.suche.max_treffer_pro_suche, token)
+                data = client.search_text(query, niche.suche.max_treffer_pro_suche, token,
+                                          near=(*center, niche.region.radius_km) if center else None)
             except BudgetExhausted as exc:
                 report.stopped_reason = str(exc)
                 break

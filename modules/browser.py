@@ -298,7 +298,7 @@ class BrowserRenderer:
             await context.close()
 
     async def capture(self, url: str, viewport: dict, screenshot_path, evaluate: str | None = None,
-                      max_height: int = 6000):
+                      max_height: int = 6000, ai_jpeg_path=None):
         """Screenshot für die Design-Prüfung (Cookie-Banner wie beim Crawl höchstens abgelehnt).
 
         Liefert (endgültige URL, Ergebnis von `evaluate` oder None). Ganze Seite, höchstens `max_height` px hoch.
@@ -330,6 +330,10 @@ class BrowserRenderer:
             await page.screenshot(path=str(screenshot_path), full_page=True,
                                   clip={"x": 0, "y": 0, "width": viewport["width"],
                                         "height": max(viewport["height"], min(int(height or 0), max_height))})
+            if ai_jpeg_path:              # kleiner, für die Bild-KI: erster Eindruck (oberer Bereich)
+                await page.screenshot(path=str(ai_jpeg_path), type="jpeg", quality=70, full_page=True,
+                                      clip={"x": 0, "y": 0, "width": viewport["width"],
+                                            "height": max(viewport["height"], min(int(height or 0), viewport["height"] * 2))})
             return page.url, data
         except PlaywrightError as exc:
             raise BrowserCrashed(f"Browserfehler: {str(exc)[:200]}") from exc

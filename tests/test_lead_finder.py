@@ -170,3 +170,13 @@ def test_export(db):
 
 def test_haversine():
     assert 50 < haversine_km(48.4085, 10.4452, 48.1374, 11.5755) < 95     # Jettingen → München ≈ 88 km
+
+
+def test_ambiguous_town_is_resolved_near_home(db):
+    """„Jettingen“ darf nicht das 400 km entfernte Jettingen (BW) werden: Suche mit Umkreis um die Heimat."""
+    fake = FakePlaces()
+    n = niche()
+    n.region.lat, n.region.lng = 48.4085, 10.4452
+    find_leads(db, client_for(db, fake), n, max_queries=1)
+    assert all("locationBias" in call for call in fake.calls)
+    assert fake.calls[0]["locationBias"]["circle"]["center"] == {"latitude": 48.4085, "longitude": 10.4452}

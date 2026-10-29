@@ -21,6 +21,9 @@ class Region(BaseModel):
     ort: str = Field(min_length=2)
     weitere_orte: list[str] = Field(default_factory=list)
     radius_km: float = Field(20, gt=0, le=200)
+    # Heimat: mehrdeutige Ortsnamen ("Jettingen") werden in der Nähe aufgelöst, nicht 400 km entfernt
+    lat: float | None = None
+    lng: float | None = None
 
     @property
     def orte(self) -> list[str]:

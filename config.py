@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     google_places_api_key: SecretStr | None = None
     deepseek_api_key: SecretStr | None = None
     deepseek_model: str = "deepseek-chat"
+    deepseek_vision_model: str = "deepseek-flash"     # sieht Screenshots (Design-Urteil)
     deepseek_base_url: str = "https://api.deepseek.com"
     ai_max_cost_eur: float = Field(2.0, ge=0)
     # Annahme, bitte mit der aktuellen DeepSeek-Preisliste abgleichen (€ pro 1 Mio. Token)
