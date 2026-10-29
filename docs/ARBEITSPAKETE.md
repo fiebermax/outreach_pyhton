@@ -16,6 +16,10 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 1.4 Logging | erledigt | `tests/test_logging.py` |
 | 1.5 Fehlertypen | erledigt | `tests/test_errors_retry.py` |
 | 1.6 Retry | erledigt | `tests/test_errors_retry.py` |
+| 2.1 Schemas Lead/Kontakt | erledigt | `tests/test_schemas.py` |
+| 2.2 Schemas Crawl | erledigt | `tests/test_schemas.py` |
+| 2.3 Schemas Analyse | erledigt | `tests/test_schemas.py` |
+| 2.4 Normalisierung | erledigt | `tests/test_normalize.py` (`core/normalize.py`) |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.
