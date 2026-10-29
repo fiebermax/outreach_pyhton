@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # Cookie-Banner: none = nie klicken, reject = höchstens "Ablehnen", reject_then_accept = notfalls zustimmen
     consent_policy: str = Field("reject", pattern="^(none|reject|reject_then_accept)$")
 
+    # --- Google Places (Kostenbremse) ---
+    places_max_requests_per_run: int = Field(30, ge=1, le=500)
+    places_monthly_limit: int = Field(800, ge=1)
+    places_cache_days: float = Field(30, ge=0, le=30)   # Google erlaubt nur begrenztes Zwischenspeichern
+
     # --- Outreach ---
     contact_cooldown_days: int = Field(365, ge=0)   # Sperrfrist nach jedem Kontakt
 

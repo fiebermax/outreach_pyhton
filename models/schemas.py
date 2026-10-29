@@ -112,6 +112,12 @@ class Lead(_Model):
     source: str = Field(min_length=1)                 # z. B. "google_places"
     source_ref: str | None = None                     # z. B. place_id
     collected_at: datetime = Field(default_factory=utcnow)
+    # Anreicherung (Lead Finder)
+    niche_branch: str | None = None
+    niche_fit: float | None = Field(default=None, ge=0, le=1)
+    niche_reason: str | None = None
+    distance_km: float | None = Field(default=None, ge=0)
+    business_status: str | None = None                # z. B. OPERATIONAL, CLOSED_PERMANENTLY
 
     @field_validator("website", mode="before")
     @classmethod

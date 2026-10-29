@@ -44,6 +44,12 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 3.12 Blockade-Erkennung | erledigt | HTTP 401/403 + Inhaltsmuster, kein Browser bei Sperre (`tests/test_scraper.py`) |
 | 3.13 Unterseiten-Auswahl | erledigt | `modules/page_selection.py`, `tests/test_page_selection.py` |
 | 3.14 Stufen-Orchestrierung | erledigt | `modules/scraper.py`, `tests/test_scraper.py` |
+| 5.1 Quellen-Entscheidung | erledigt | Google Places (New), siehe `modules/lead_finder.py` Kopfkommentar |
+| 5.2/5.3 Places-Adapter | erledigt | `tests/test_lead_finder.py` (simulierter Server) |
+| 5.5 Cache | erledigt | 30 Tage, zweiter Lauf ohne API-Kosten |
+| 5.6 Speichern + Export | erledigt | Upsert ohne Dubletten, `export_leads` |
+| 5.7 Verzeichnisprofile | erledigt | `website_kind` = own / directory / none |
+| 5.8 Nische anwenden | erledigt | Branche, Passung, Umkreis, Lauf- und Monatslimit |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,

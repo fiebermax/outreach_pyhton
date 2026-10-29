@@ -59,6 +59,13 @@ def identity_domain(website: str | None) -> str | None:
     return domain
 
 
+def website_kind(website: str | None) -> str:
+    """'own' = eigene Startseite, 'directory' = Verzeichnis-/Social-Profil, 'none' = keine Angabe."""
+    if not website:
+        return "none"
+    return "own" if identity_domain(website) else "directory"
+
+
 class StepStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -284,6 +291,32 @@ _MIGRATIONS: list[str] = [
     CREATE INDEX ix_contact_events_company ON contact_events(company_id, occurred_at);
     CREATE INDEX ix_companies_name_key ON companies(name_key);
     """,
+    # --- v3: Nische, Art der Website, API-Cache und Nutzungszähler ---------
+    f"""
+    ALTER TABLE companies ADD COLUMN niche_branch TEXT;
+    ALTER TABLE companies ADD COLUMN niche_fit REAL;
+    ALTER TABLE companies ADD COLUMN niche_reason TEXT;
+    ALTER TABLE companies ADD COLUMN website_kind TEXT CHECK (website_kind IN ('own', 'directory', 'none'));
+    ALTER TABLE companies ADD COLUMN distance_km REAL;
+    ALTER TABLE companies ADD COLUMN business_status TEXT;
+
+    CREATE TABLE api_cache (
+        id INTEGER PRIMARY KEY,
+        cache_key TEXT NOT NULL UNIQUE,
+        provider TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        {_TS}
+    );
+
+    CREATE TABLE api_calls (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        success INTEGER NOT NULL CHECK (success IN (0, 1)),
+        {_TS}
+    );
+    CREATE INDEX ix_api_calls_provider ON api_calls(provider, created_at);
+    """,
 ]
 
 
@@ -376,6 +409,9 @@ class Database:
             "address_key": addr_key, "city": lead.city, "postal_code": lead.postal_code, "phone": lead.phone,
             "email": lead.email, "website": lead.website, "domain": domain, "source": lead.source,
             "source_ref": lead.source_ref, "collected_at": lead.collected_at.isoformat(),
+            "niche_branch": lead.niche_branch, "niche_fit": lead.niche_fit, "niche_reason": lead.niche_reason,
+            "website_kind": website_kind(lead.website), "distance_km": lead.distance_km,
+            "business_status": lead.business_status,
         }
         with self.transaction() as c:
             company_id, matched_by = self._find_company(domain, lead, name_key, addr_key)
@@ -713,4 +749,32 @@ class Database:
             if len(rows) == 1:          # mehrdeutige Namen nicht raten
                 return rows[0]["id"]
         return None
+
+    # ------------------------------------------------------------- API-Cache und -Nutzung
+
+    def cache_get(self, key: str, max_age_days: float) -> str | None:
+        row = self.conn.execute("SELECT response_json, updated_at FROM api_cache WHERE cache_key = ?", (key,)).fetchone()
+        if row is None:
+            return None
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(row["updated_at"])
+        return row["response_json"] if age.total_seconds() <= max_age_days * 86400 else None
+
+    def cache_put(self, key: str, provider: str, response_json: str) -> None:
+        now = _now()
+        with self.transaction() as c:
+            c.execute("INSERT INTO api_cache (cache_key, provider, response_json, created_at, updated_at)"
+                      " VALUES (?, ?, ?, ?, ?) ON CONFLICT (cache_key) DO UPDATE SET"
+                      " response_json = excluded.response_json, updated_at = excluded.updated_at",
+                      (key, provider, response_json, now, now))
+
+    def log_api_call(self, provider: str, endpoint: str, success: bool) -> None:
+        now = _now()
+        with self.transaction() as c:
+            c.execute("INSERT INTO api_calls (provider, endpoint, success, created_at, updated_at)"
+                      " VALUES (?, ?, ?, ?, ?)", (provider, endpoint, int(success), now, now))
+
+    def api_calls_this_month(self, provider: str, now: datetime | None = None) -> int:
+        month = (now or datetime.now(timezone.utc)).strftime("%Y-%m")
+        return self.conn.execute("SELECT COUNT(*) FROM api_calls WHERE provider = ? AND substr(created_at, 1, 7) = ?",
+                                 (provider, month)).fetchone()[0]
 
