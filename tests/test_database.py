@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from modules.database import Database, NotAnalyzableError, Step, StepStatus, identity_domain
+from modules.database import _MIGRATIONS, Database, NotAnalyzableError, Step, StepStatus, identity_domain
 from models.schemas import (
     AnalysisReport, ContactInfo, ContactKind, ContactOrigin, CrawlResult, CrawlStatus, EvidenceType,
     ExtractionMethod, Finding, FindingCategory, Lead, PageResult, Severity,
@@ -48,7 +48,7 @@ def test_schema_created_and_migration_idempotent(tmp_path):
     path = tmp_path / "x.db"
     Database(path).close()
     again = Database(path)
-    assert again.schema_version == 1
+    assert again.schema_version == len(_MIGRATIONS)
     tables = {r[0] for r in again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"companies", "contacts", "crawl_runs", "analysis_reports", "findings", "lead_scores",
             "email_drafts", "send_attempts", "blocklist", "job_steps", "error_log"} <= tables

@@ -34,6 +34,14 @@ SHARED_PLATFORM_DOMAINS = {
 _ROOT_PATHS = {"", "/", "/index.html", "/index.php", "/home", "/de", "/de/", "/start"}
 
 
+# Freemail-Domains identifizieren keine Firma (gmail.com gehört nicht dem Maler).
+_FREEMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "web.de", "gmx.de", "gmx.net", "t-online.de", "outlook.com", "hotmail.com",
+    "hotmail.de", "yahoo.de", "yahoo.com", "icloud.com", "me.com", "aol.com", "freenet.de", "posteo.de", "mail.de",
+    "online.de", "arcor.de", "live.de", "outlook.de",
+}
+
+
 def identity_domain(website: str | None) -> str | None:
     """Domain als Identitätsmerkmal – nur wenn die URL auf eine Startseite zeigt.
 
@@ -65,6 +73,37 @@ class Step(str, Enum):
     SCORE = "score"
     DRAFT = "draft"
     SEND = "send"
+
+
+class Channel(str, Enum):
+    EMAIL = "email"
+    PHONE = "phone"
+    VISIT = "visit"
+    LETTER = "letter"
+    SOCIAL = "social"
+    OTHER = "other"
+
+
+class Outcome(str, Enum):
+    SENT = "sent"                      # verschickt/angerufen, noch keine Reaktion erfasst
+    NO_REPLY = "no_reply"
+    REPLIED = "replied"
+    INTERESTED = "interested"
+    NOT_INTERESTED = "not_interested"
+    MEETING = "meeting"
+    CUSTOMER = "customer"
+    BOUNCED = "bounced"
+    DO_NOT_CONTACT = "do_not_contact"  # Widerspruch: nie wieder kontaktieren
+
+
+# Ergebnisse, nach denen niemand mehr unaufgefordert kontaktiert wird.
+_STOP_OUTCOMES = {Outcome.NOT_INTERESTED, Outcome.DO_NOT_CONTACT}
+
+
+@dataclass(frozen=True)
+class ContactDecision:
+    allowed: bool
+    reason: str
 
 
 class NotAnalyzableError(ValueError):
@@ -223,6 +262,27 @@ _MIGRATIONS: list[str] = [
         temporary INTEGER NOT NULL CHECK (temporary IN (0, 1)),
         {_TS}
     );
+    """,
+    # --- v2: Kontakthistorie (auch Kontakte außerhalb des Systems) -----------
+    f"""
+    ALTER TABLE companies ADD COLUMN do_not_contact INTEGER NOT NULL DEFAULT 0 CHECK (do_not_contact IN (0, 1));
+    ALTER TABLE companies ADD COLUMN do_not_contact_reason TEXT;
+
+    CREATE TABLE contact_events (
+        id INTEGER PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        channel TEXT NOT NULL CHECK (channel IN ('email', 'phone', 'visit', 'letter', 'social', 'other')),
+        outcome TEXT NOT NULL CHECK (outcome IN ('sent', 'no_reply', 'replied', 'interested', 'not_interested',
+                                                 'meeting', 'customer', 'bounced', 'do_not_contact')),
+        occurred_at TEXT NOT NULL,
+        recipient TEXT,
+        draft_id INTEGER REFERENCES email_drafts(id),
+        note TEXT,
+        source TEXT NOT NULL CHECK (source IN ('system', 'manual', 'import')),
+        {_TS}
+    );
+    CREATE INDEX ix_contact_events_company ON contact_events(company_id, occurred_at);
+    CREATE INDEX ix_companies_name_key ON companies(name_key);
     """,
 ]
 
@@ -541,3 +601,116 @@ class Database:
 
     def errors_for(self, company_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM error_log WHERE company_id = ? ORDER BY id", (company_id,)).fetchall()
+
+    # ------------------------------------------------------------- Kontakthistorie
+
+    def record_contact(
+        self,
+        company_id: int,
+        channel: Channel,
+        outcome: Outcome,
+        *,
+        occurred_at: datetime | None = None,
+        recipient: str | None = None,
+        note: str | None = None,
+        draft_id: int | None = None,
+        source: str = "manual",
+    ) -> int:
+        """Hält einen Kontakt fest. Ablehnung/Widerspruch sperrt das Unternehmen dauerhaft."""
+        now = _now()
+        when = (occurred_at or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(timespec="seconds")
+        with self.transaction() as c:
+            cur = c.execute(
+                "INSERT INTO contact_events (company_id, channel, outcome, occurred_at, recipient, draft_id, note,"
+                " source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (company_id, channel.value, outcome.value, when, recipient.lower() if recipient else None,
+                 draft_id, note, source, now, now),
+            )
+            if outcome in _STOP_OUTCOMES:
+                self.set_do_not_contact(company_id, f"{outcome.value} am {when[:10]}" + (f": {note}" if note else ""))
+                if recipient:
+                    self.add_block("email", recipient, outcome.value)
+            return cur.lastrowid
+
+    def set_do_not_contact(self, company_id: int, reason: str) -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE companies SET do_not_contact = 1, do_not_contact_reason = ?, updated_at = ? WHERE id = ?",
+                      (reason, _now(), company_id))
+
+    def contact_history(self, company_id: int) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM contact_events WHERE company_id = ? ORDER BY occurred_at DESC, id DESC", (company_id,)
+        ).fetchall()
+
+    def may_contact(
+        self, company_id: int, email: str | None = None, cooldown_days: int = 365, now: datetime | None = None
+    ) -> ContactDecision:
+        """Darf dieses Unternehmen (unaufgefordert) kontaktiert werden? Prüft alles, was die DB weiß.
+
+        Das ist keine rechtliche Freigabe – die prüft der Mailer zusätzlich (Paket 8.3).
+        """
+        company = self.get_company(company_id)
+        if company is None:
+            return ContactDecision(False, "Unternehmen unbekannt")
+        if company["do_not_contact"]:
+            return ContactDecision(False, f"gesperrt: {company['do_not_contact_reason'] or 'ohne Angabe'}")
+        if self.is_blocked(email=email, domain=company["domain"]):
+            return ContactDecision(False, "Empfänger oder Domain auf Sperrliste")
+        last = self.conn.execute(
+            "SELECT outcome, occurred_at, channel FROM contact_events WHERE company_id = ?"
+            " ORDER BY occurred_at DESC, id DESC LIMIT 1", (company_id,)
+        ).fetchone()
+        if last is not None:
+            if last["outcome"] in (Outcome.CUSTOMER.value, Outcome.INTERESTED.value, Outcome.MEETING.value,
+                                   Outcome.REPLIED.value):
+                return ContactDecision(False, f"laufender Kontakt ({last['outcome']} am {last['occurred_at'][:10]})")
+            age = (now or datetime.now(timezone.utc)) - datetime.fromisoformat(last["occurred_at"])
+            if age.days < cooldown_days:
+                return ContactDecision(False, f"zuletzt kontaktiert am {last['occurred_at'][:10]} per {last['channel']}"
+                                              f" (Sperrfrist {cooldown_days} Tage)")
+        pending = self.conn.execute(
+            "SELECT id FROM email_drafts WHERE company_id = ? AND status = 'draft'", (company_id,)
+        ).fetchone()
+        if pending is not None:
+            return ContactDecision(False, f"offener Entwurf #{pending['id']} existiert bereits")
+        return ContactDecision(True, "kein Hinderungsgrund in der Datenbank")
+
+    def contact_overview(self) -> list[sqlite3.Row]:
+        """Alle jemals kontaktierten Unternehmen mit letztem Kontakt – für die Übersicht."""
+        return self.conn.execute(
+            """SELECT c.id, c.name, c.domain, c.do_not_contact, e.occurred_at AS last_contact, e.channel, e.outcome,
+                      (SELECT COUNT(*) FROM contact_events x WHERE x.company_id = c.id) AS contacts
+               FROM companies c
+               JOIN contact_events e ON e.id = (SELECT id FROM contact_events y WHERE y.company_id = c.id
+                                                ORDER BY occurred_at DESC, id DESC LIMIT 1)
+               ORDER BY e.occurred_at DESC"""
+        ).fetchall()
+
+    def find_company(self, *, website: str | None = None, email: str | None = None,
+                     name: str | None = None) -> int | None:
+        """Sucht ein bekanntes Unternehmen über Domain, E-Mail(-Domain) oder exakten normalisierten Namen."""
+        if website and identity_domain(website):
+            row = self.conn.execute("SELECT id FROM companies WHERE domain = ?", (identity_domain(website),)).fetchone()
+            if row:
+                return row["id"]
+        if email:
+            email = email.strip().lower()
+            row = self.conn.execute(
+                "SELECT company_id AS id FROM contacts WHERE kind = 'EMAIL' AND value = ?"
+                " UNION SELECT id FROM companies WHERE email = ?"
+                " UNION SELECT company_id FROM contact_events WHERE recipient = ? LIMIT 1",
+                (email, email, email)).fetchone()
+            if row:
+                return row["id"]
+            domain = email.rsplit("@", 1)[-1]
+            if domain not in _FREEMAIL_DOMAINS:
+                row = self.conn.execute("SELECT id FROM companies WHERE domain = ?", (domain,)).fetchone()
+                if row:
+                    return row["id"]
+        if name:
+            rows = self.conn.execute("SELECT id FROM companies WHERE name_key = ?",
+                                     (normalize_company_name(name),)).fetchall()
+            if len(rows) == 1:          # mehrdeutige Namen nicht raten
+                return rows[0]["id"]
+        return None
+

@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     crawl_retries: int = Field(2, ge=0, le=5)
     min_extraction_quality: float = Field(0.5, ge=0, le=1)
 
+    # --- Outreach ---
+    contact_cooldown_days: int = Field(365, ge=0)   # Sperrfrist nach jedem Kontakt
+
     # --- Betrieb ---
     log_level: str = "INFO"
 
