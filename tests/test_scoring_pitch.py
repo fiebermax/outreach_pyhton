@@ -132,3 +132,16 @@ def test_drafts_contain_no_generic_ai_phrases():
                                   measurement={"final_url": "http://x.de/"})]:
         body = build_draft([finding], "a@b.de", SENDER).body.lower()
         assert not any(p in body for p in phrases), body
+
+
+def test_lint_rejects_sweeping_claims():
+    draft = build_draft([f()], "a@b.de", SENDER)
+    bad = draft.model_copy(update={"body": draft.body + "\nDie meisten Kunden rufen oft direkt an."})
+    problems = lint_draft(bad, [f()], SENDER)
+    assert any("die meisten" in p.lower() for p in problems) and any("oft" in p for p in problems)
+
+
+def test_phone_block_uses_clean_number():
+    finding = f(evidence="„Telefon: 08225 12345 ·“ (kein tel:-Link)", measurement={"number": "08225 12345"})
+    body = build_draft([finding], "a@b.de", SENDER).body
+    assert "(„08225 12345“)" in body and "·" not in body

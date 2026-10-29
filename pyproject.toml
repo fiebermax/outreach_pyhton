@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["config"]
+py-modules = ["config", "main"]
 
 [tool.setuptools.packages.find]
 include = ["core*", "modules*", "services*", "models*"]

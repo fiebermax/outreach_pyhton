@@ -179,7 +179,7 @@ def check_contact(result: CrawlResult, ctx: CheckContext) -> list[Finding]:
                       "Die Telefonnummer ist nicht als Link hinterlegt; auf dem Smartphone kann man sie nicht direkt antippen.",
                       f"„{c.context or c.raw}“ (kein tel:-Link)", c.source_url, EvidenceType.DIRECTLY_OBSERVED, 0.85,
                       Severity.MEDIUM if relevant else Severity.LOW, f'Nummer als <a href="tel:{c.value}"> verlinken.',
-                      None))
+                      {"number": c.raw}))
     broken = [c for c in phones if c.origin is ContactOrigin.LINK and re.search(r"[\"<>]", c.raw)]
     if broken:
         c = broken[0]

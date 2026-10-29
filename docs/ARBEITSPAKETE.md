@@ -61,6 +61,7 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 4.7 Echte Stichprobe | erledigt (klein) | `docs/stichprobe.md` – 10 Websites, 3 Auffälligkeiten geklärt |
 | 7.6 + 8.1 Entwurf speichern (.eml) | erledigt | `modules/mailer.py`, `tests/test_mailer.py` |
 | 8.2–8.6 Sperrliste, Freigabe, SMTP, Idempotenz, Fehler | erledigt, Versand standardmäßig AUS | `tests/test_mailer.py` (Fake-SMTP) |
+| 9.1–9.5 Services, CLI, Wiederaufnahme | erledigt | `main.py`, `services/`, `tests/test_pipeline.py` |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,

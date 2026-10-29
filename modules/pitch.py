@@ -59,24 +59,24 @@ def block_for(f: Finding) -> Block | None:
     d, m = _domain(f.source_url), f.measurement or {}
     issue = f.issue_id
     if issue == "phone_not_clickable":
-        number = re.sub(r"^.*?„|“.*$|\s*\(kein tel:-Link\)", "", f.evidence).strip()
+        number = str(m.get("number") or re.sub(r"^.*?„|“.*$|\s*\(kein tel:-Link\)", "", f.evidence)).strip()
         return Block(f"Telefonnummer auf {d}",
                      f"{_sentence_start(_path(f.source_url))} steht Ihre Telefonnummer nur als Text "
                      f"(„{number[:60]}“). Auf dem Handy lässt sie sich deshalb nicht antippen.",
-                     "Gerade wer unterwegs nach einem Handwerker sucht, ruft meist direkt vom Smartphone an.",
+                     "Wer die Seite auf dem Handy öffnet, muss die Nummer abtippen.",
                      "Mit einem Telefon-Link (tel:) ist das in ein paar Minuten behoben.")
     if issue == "tel_link_malformed":
         return Block(f"Telefon-Link auf {d}",
                      f"der Telefon-Link {_path(f.source_url)} ist im Code fehlerhaft hinterlegt ({f.evidence}).",
-                     "Je nach Handy wird beim Antippen eine falsche oder gar keine Nummer gewählt.",
+                     "Beim Antippen kann dadurch eine falsche oder gar keine Nummer gewählt werden.",
                      "Der Link müsste nur auf die reine Nummer korrigiert werden.")
     if issue == "horizontal_overflow_mobile":
         culprit = m.get("culprit")
         return Block(f"Darstellung von {d} auf dem Handy",
                      "auf dem Smartphone lässt sich Ihre Startseite seitlich verschieben, weil ein Element breiter "
                      "ist als der Bildschirm" + (f" (im Code: {culprit})" if culprit and culprit != "unbekannt" else "") + ".",
-                     "Das wirkt beim Scrollen schnell unruhig.",
-                     "Meist reicht eine kleine Anpassung an diesem einen Element.")
+                     "Beim Scrollen verrutscht die Seite dadurch zur Seite.",
+                     "Das lässt sich an diesem einen Element beheben.")
     if issue == "viewport_meta_missing":
         return Block(f"{d} auf dem Smartphone",
                      "Ihre Startseite wird auf Smartphones verkleinert wie am Computer angezeigt; es fehlt die "
@@ -87,8 +87,8 @@ def block_for(f: Finding) -> Block | None:
         return Block(f"„Nicht sicher“ bei {d}",
                      "Ihre Website wird unverschlüsselt (http) aufgerufen. Browser wie Chrome zeigen deshalb "
                      "„Nicht sicher“ in der Adresszeile.",
-                     "Manche Besucher brechen an dieser Stelle ab, vor allem bei Kontaktformularen.",
-                     "Ein Zertifikat gibt es bei den meisten Hostern kostenlos.")
+                     "Das sehen Besucher direkt neben Ihrer Adresse.",
+                     "Ein Zertifikat lässt sich beim Hoster einrichten, häufig ohne Zusatzkosten.")
     if issue == "http_not_redirected":
         return Block(f"Weiterleitung bei {d}",
                      f"Ihre Website ist auch unverschlüsselt unter {m.get('url', 'http://' + d)} erreichbar und "
@@ -99,20 +99,20 @@ def block_for(f: Finding) -> Block | None:
         return Block(f"Sicherheitswarnung bei {d}",
                      "beim Aufruf Ihrer Website zeigt der Browser eine Sicherheitswarnung, weil das Zertifikat "
                      "nicht akzeptiert wird.",
-                     "Die meisten Besucher klicken an dieser Stelle weg.",
-                     "Oft ist nur das Zertifikat abgelaufen und muss erneuert werden.")
+                     "Besucher kommen erst nach einem zusätzlichen Klick auf „Trotzdem fortfahren“ auf die Seite.",
+                     "Das Zertifikat muss erneuert oder korrekt eingerichtet werden.")
     if f.category in (FindingCategory.SPELLING, FindingCategory.GRAMMAR) and issue.startswith("ai_"):
         quote, correction = _quote_parts(f)
         if not correction:
             return None
         return Block(f"Kleiner Tippfehler auf {d}",
                      f"{_path(f.source_url)} steht „{quote}“, gemeint ist vermutlich „{correction}“.",
-                     "Eine Kleinigkeit, aber solche Stellen fallen Kunden oft zuerst auf.",
+                     "Eine Kleinigkeit, die sich schnell korrigieren lässt.",
                      "")
     if issue == "copyright_outdated":
         return Block(f"Jahreszahl auf {d}",
                      f"im Footer Ihrer Website steht noch „{f.evidence}“.",
-                     "Manche Besucher schließen daraus, dass die Seite nicht mehr gepflegt wird.",
+                     "Das kann den Eindruck erwecken, die Seite werde nicht mehr gepflegt.",
                      "Die Jahreszahl lässt sich auch automatisch aktualisieren.")
     if issue in ("title_missing", "title_generic"):
         title = re.sub(r"</?title>", "", f.evidence)
@@ -120,7 +120,7 @@ def block_for(f: Finding) -> Block | None:
                      "in Google und im Browser-Tab erscheint Ihre Startseite " +
                      ("ohne eigenen Titel." if issue == "title_missing" else f"nur mit dem Titel „{title}“."),
                      "Dort steht normalerweise, was Sie anbieten und wo, damit man Sie in der Trefferliste erkennt.",
-                     "Der Titel lässt sich im Seiten-Editor meist direkt ändern.")
+                     "Der Titel lässt sich im Seiten-Editor ändern.")
     if issue == "broken_internal_links":
         first = f.evidence.split(";")[0]
         return Block(f"Toter Link auf {d}",
@@ -183,6 +183,9 @@ FORBIDDEN = [
     "exklusiv", "maßgeschneidert", "ganzheitlich", "auf das nächste level", "game changer", "umsatz", "conversion",
     "verlieren sie", "kunden verlieren", "ich habe ihre website getestet", "ki-analyse", "künstliche intelligenz",
 ]
+# Pauschalbehauptungen über Besucherverhalten sind nicht belegbar.
+SWEEPING = re.compile(r"\b(die meisten|meistens|meist|oft|immer|niemals|jeder kunde|alle kunden|studien|statistisch)\b",
+                      re.I)
 
 
 def lint_draft(draft: EmailDraft, findings: list[Finding], sender: Sender) -> list[str]:
@@ -193,6 +196,8 @@ def lint_draft(draft: EmailDraft, findings: list[Finding], sender: Sender) -> li
     for word in FORBIDDEN:
         if word in low:
             problems.append(f"verbotene Formulierung: „{word}“")
+    for match in SWEEPING.finditer(draft.body):
+        problems.append(f"Pauschalbehauptung: „{match.group(0)}“")
     if text.count("!") > 1:
         problems.append("mehr als ein Ausrufezeichen")
     if len(draft.body) > 1400:
