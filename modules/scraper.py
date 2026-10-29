@@ -24,6 +24,7 @@ import httpx
 from config import Settings
 from core.errors import InvalidUrlError, OutreachError
 from core.normalize import normalize_url
+from core.retry import retry_async
 from models.schemas import CrawlResult, CrawlStatus, ExtractionMethod, PageResult, utcnow
 from modules.browser import BrowserRenderer, RenderResult
 from modules.content_extractor import ExtractedContent, Link, extract_content
@@ -133,7 +134,10 @@ class SiteCrawler:
             want_browser = False            # Schutzmechanismen werden nicht umgangen
         if want_browser and self.renderer is not None:
             try:
-                render = await self.renderer.render(response.final_url, content_ok=_enough_text)
+                # Ein Wiederholungsversuch bei vorübergehenden Fehlern (echter Fall elektro-suntec.de:
+                # HTTP-Abruf 200, Browser-Aufruf kurz danach 502).
+                render = await retry_async(lambda: self.renderer.render(response.final_url, content_ok=_enough_text),
+                                           attempts=2, base_delay=2.0, max_delay=5.0, label="browser")
                 r_content = extract_content(render.html, render.final_url)
                 r_assessment = _assess(r_content, rendered=True, min_quality=cfg.min_quality)
                 notes.append(f"Browser: {r_assessment.status.value} ({r_assessment.reasons[0]}), "

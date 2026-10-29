@@ -58,6 +58,7 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 6.13 Analyzer | erledigt | `modules/analyzer.py` |
 | 7.1–7.3 Scoring | erledigt | `modules/lead_scoring.py`, `tests/test_scoring_pitch.py` |
 | 7.4–7.5 Anti-Pitch + Prüfung | erledigt | `modules/pitch.py`, Bausteine je Befundtyp, `lint_draft`; 2 echte Entwürfe geprüft |
+| 4.7 Echte Stichprobe | erledigt (klein) | `docs/stichprobe.md` – 10 Websites, 3 Auffälligkeiten geklärt |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,

@@ -124,3 +124,11 @@ def test_hard_site_deadline(site_server):
     result, outcomes = crawl(site_server + "/slow", fetch=slow_fetch, max_seconds=1.5)
     assert _t.monotonic() - t0 < 3
     assert result.status is CrawlStatus.TIMEOUT and "Zeitlimit der Website" in result.failure_reason
+
+
+def test_browser_retried_once_on_temporary_error(site_server, server_hits):
+    """Echter Fall elektro-suntec.de: HTTP 200, Browser-Aufruf 502 → einmal wiederholen."""
+    result, outcomes = crawl(site_server + "/browser-502", browser=True, max_pages=1)
+    home = result.pages[0]
+    assert server_hits["/browser-502"] == 3
+    assert home.horizontal_overflow is False            # Layout trotzdem gemessen

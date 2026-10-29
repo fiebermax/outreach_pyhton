@@ -53,6 +53,13 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/slow":
             time.sleep(2)
             return self._send(200, b"<html><body>zu spaet</body></html>")
+        if path == "/browser-502":               # 1. Aufruf ok (HTTP), 2. Aufruf 502 (Browser), danach ok
+            if hits == 2:
+                return self._send(502, b"bad gateway")
+            return self._send(200, (SITES / "static.html").read_bytes())
+        if path == "/never":                     # antwortet praktisch nie (für hängende iframes)
+            time.sleep(20)
+            return self._send(200, b"<html><body>spaet</body></html>")
         if path == "/server-error":
             return self._send(500, b"<h1>Internal Server Error</h1>")
         if path.startswith("/flaky"):           # erst 503, dann ok – pro Pfad

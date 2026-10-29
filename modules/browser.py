@@ -15,6 +15,7 @@ mitgespeichert, bewertet wird erst in der Analyse.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections.abc import Callable
@@ -100,6 +101,18 @@ _BUTTONS_JS = """
 """
 
 
+FRAME_EVAL_TIMEOUT_SECONDS = 3.0
+
+
+async def _frame_eval(frame, expression: str, arg=None, timeout: float = FRAME_EVAL_TIMEOUT_SECONDS):
+    """evaluate mit Zeitlimit. Playwright wartet sonst unbegrenzt auf Frames, die nie ein Dokument bekommen
+    (echter Fall elektro-rick.base44.app: leeres iframe ohne URL ließ den Crawl hängen)."""
+    try:
+        return await asyncio.wait_for(frame.evaluate(expression, arg), timeout)
+    except (asyncio.TimeoutError, PlaywrightError):
+        return None
+
+
 def classify_button(text: str) -> str:
     """'reject' | 'settings' | 'accept' | 'other' – nur nach Beschriftung, nie nach Farbe/Position."""
     if _REJECT_RE.search(text):
@@ -171,15 +184,14 @@ class BrowserRenderer:
         """Beschriftete Buttons in Frames, deren Text nach Cookie-Hinweis klingt: (Art, Text, Frame, Index)."""
         found = []
         for frame in page.frames:
-            try:
-                body = await frame.evaluate("document.body ? document.body.innerText.slice(0, 20000) : ''")
-                frame_hint = await frame.evaluate("(document.title || '') + ' ' + (window.frameElement ? "
-                                                  "(window.frameElement.title || window.frameElement.id || '') : '')")
-            except PlaywrightError:
-                continue
+            body = await _frame_eval(frame, "document.body ? document.body.innerText.slice(0, 20000) : ''")
+            if body is None:
+                continue                      # Frame ohne Dokument oder hängend: überspringen
+            frame_hint = await _frame_eval(frame, "(document.title || '') + ' ' + (window.frameElement ? "
+                                                  "(window.frameElement.title || window.frameElement.id || '') : '')") or ""
             if not _COOKIE_CONTEXT_RE.search(body + " " + frame_hint):
                 continue
-            for b in await frame.evaluate(_BUTTONS_JS, _CLICKABLE):
+            for b in await _frame_eval(frame, _BUTTONS_JS, _CLICKABLE) or []:
                 kind = classify_button(b["text"])
                 if kind != "other":
                     found.append((kind, b["text"], frame, b["i"]))
@@ -266,7 +278,9 @@ class BrowserRenderer:
             html = await page.content()
             if len(html.encode("utf-8", errors="ignore")) > lim.max_html_bytes:
                 raise ContentTooLarge(f"gerendertes HTML größer als {lim.max_html_bytes} Bytes")
-            layout = await page.evaluate(_LAYOUT_JS, OVERFLOW_TOLERANCE_PX)
+            layout = await _frame_eval(page.main_frame, _LAYOUT_JS, OVERFLOW_TOLERANCE_PX, timeout=10.0)
+            if layout is None:
+                raise BrowserCrashed("Layout-Messung nicht möglich (Zeitlimit)")
             return RenderResult(
                 url=url, final_url=page.url, status=status, html=html, title=(await page.title()) or None,
                 viewport_width=layout["viewport_width"], document_width=layout["document_width"],

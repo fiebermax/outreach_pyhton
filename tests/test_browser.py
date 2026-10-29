@@ -168,3 +168,13 @@ def test_iframe_banner(site_server):
 def test_page_without_banner(site_server):
     r = render_with(site_server, "/static.html", ConsentPolicy.REJECT)
     assert not r.consent.detected and r.consent.clicked == []
+
+
+def test_hanging_iframe_does_not_block_render(site_server):
+    """Echter Fall elektro-rick.base44.app: ein Frame ohne Dokument ließ evaluate unbegrenzt warten."""
+    import time as _t
+    t0 = _t.monotonic()
+    r = render_with(site_server, "/hanging-iframe.html", ConsentPolicy.REJECT)
+    assert _t.monotonic() - t0 < 15
+    assert "Wallboxen" in extract_content(r.html, r.final_url).cleaned_text
+    assert r.horizontal_overflow is False
