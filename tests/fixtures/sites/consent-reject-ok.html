@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanitär Beispiel</title></head>
+<body class="consent-blocked">
+  <div id="cmp-banner" class="cookie-consent" role="dialog" aria-modal="true">
+    <p>Wir verwenden Cookies. Bitte wählen Sie Ihre Datenschutzeinstellungen.</p>
+    <button id="s">Einstellungen</button>
+    <button id="r">Nur notwendige Cookies</button>
+    <button id="a">Alle akzeptieren</button>
+  </div>
+  <main id="content"></main>
+  <script>
+    const show = (who) => {
+      document.getElementById('cmp-banner').remove();
+      document.body.classList.remove('consent-blocked');
+      document.getElementById('content').innerHTML =
+        '<h1>Bad und Heizung aus einer Hand</h1><p>Wir planen und bauen Badezimmer, tauschen Heizungen und warten ' +
+        'Ihre Anlage. Unser Team arbeitet im ganzen Landkreis Günzburg und berät Sie gern bei Förderprogrammen.</p>';
+      document.body.dataset.clicked = who;
+    };
+    document.getElementById('r').onclick = () => show('reject');
+    document.getElementById('a').onclick = () => show('accept');
+    document.getElementById('s').onclick = () => { document.body.dataset.clicked = 'settings'; };
+  </script>
+</body></html>

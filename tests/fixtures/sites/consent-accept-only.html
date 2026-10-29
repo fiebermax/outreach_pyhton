@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="de" class="ccm-blocked"><head><meta charset="utf-8"><title>Zimmerei Beispiel</title></head>
+<body>
+  <div class="ccm-root"><div id="ccm-widget" class="ccm-modal" role="dialog" aria-modal="true">
+    <p>Cookie gefällig? Auch wir verwenden Cookies, damit Sie die Seite einfacher nutzen können.</p>
+    <button id="a">ANNEHMEN</button><button id="s">EINSTELLUNGEN &amp; INFOS</button><button id="r">Ablehnen</button>
+  </div></div>
+  <main id="content"></main>
+  <script>
+    document.getElementById('a').onclick = () => {
+      document.querySelector('.ccm-root').remove();
+      document.getElementById('content').innerHTML = '<h1>Zimmerei und Holzbau</h1><p>Wir bauen Dachstühle, ' +
+        'Carports und Holzhäuser. Seit drei Generationen arbeiten wir mit heimischem Holz aus der Region.</p>';
+      document.body.dataset.clicked = 'accept';
+    };
+    document.getElementById('r').onclick = () => {
+      document.querySelector('.ccm-root').remove();
+      document.getElementById('content').innerHTML = '<p>Inhalte nicht verfügbar.</p>';
+      document.body.dataset.clicked = 'reject';
+    };
+  </script>
+</body></html>

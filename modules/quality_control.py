@@ -6,7 +6,8 @@ eine geöffnete Browserseite ist noch kein Erfolg.
 Reihenfolge der Prüfungen (die erste zutreffende entscheidet den Status):
 1. Blockade (Captcha, Bot-Schutz)           → BLOCKED
 2. Fehlerseite trotz Inhalt (Soft-404)      → HTTP_ERROR
-3. (fast) kein Text + JS-Hinweise           → JS_RENDERING_REQUIRED (bzw. EMPTY_CONTENT nach Rendering)
+3. (fast) kein Text außer Cookie-Banner      → EMPTY_CONTENT (Browser darf "Ablehnen" versuchen)
+3b. (fast) kein Text + JS-Hinweise          → JS_RENDERING_REQUIRED (bzw. EMPTY_CONTENT nach Rendering)
 4. (fast) kein Text                         → EMPTY_CONTENT
 5. Platzhalterseite (im Aufbau, geparkt)    → EMPTY_CONTENT
 6. Score ≥ Mindestqualität, genug Wörter    → SUCCESS
@@ -98,6 +99,7 @@ def assess_page(
     title: str | None,
     heading_texts: list[str],
     js_signals: list[str] | None = None,
+    consent_banners: list[str] | None = None,
     rendered: bool = False,
     min_quality: float = 0.5,
 ) -> QualityAssessment:
@@ -107,10 +109,12 @@ def assess_page(
     keine weitere Stufe mehr, und leerer Text ist EMPTY_CONTENT statt JS_RENDERING_REQUIRED.
     """
     js_signals = js_signals or []
+    consent_banners = consent_banners or []
     metrics = text_metrics(cleaned_text)
     words, unique_ratio = int(metrics["words"]), float(metrics["unique_line_ratio"])
     score, parts = score_page(words, unique_ratio, len(heading_texts), title)
-    metrics.update({"score": score, "headings": len(heading_texts), "js_signals": len(js_signals), "rendered": rendered})
+    metrics.update({"score": score, "headings": len(heading_texts), "js_signals": len(js_signals),
+                    "consent_banners": len(consent_banners), "rendered": rendered})
     head = " ".join(filter(None, [title or "", *heading_texts[:3], cleaned_text[:400]]))
 
     def result(status: CrawlStatus, *reasons: str, needs_rendering: bool = False) -> QualityAssessment:
@@ -123,6 +127,14 @@ def assess_page(
     marker = _matches(_ERROR_MARKERS, " ".join(filter(None, [title or "", *heading_texts[:2]])))
     if marker and words < ERROR_PAGE_MAX_WORDS:
         return result(CrawlStatus.HTTP_ERROR, f"Fehlerseite trotz Inhalt: „{marker}“ in Titel/Überschrift")
+
+    if words < MIN_WORDS_ANY and consent_banners:
+        # Banner-Text ist bereits entfernt; was übrig bleibt, reicht nicht. Ob der Inhalt wirklich hinter dem
+        # Banner liegt, ist damit NICHT belegt (echtes Beispiel: Seite hat auch nach Zustimmung nur 3 Wörter).
+        # Der Browser kann "Ablehnen" versuchen; die Meldung beschreibt nur das Gemessene.
+        return result(CrawlStatus.EMPTY_CONTENT,
+                      f"nur {words} Wörter außer Cookie-Banner ({consent_banners[0][:50]})",
+                      needs_rendering=not rendered)
 
     if words < MIN_WORDS_ANY:
         if js_signals and not rendered:

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Dachdecker ohne Ablehnen</title></head>
+<body>
+  <div id="cookie-notice" role="dialog"><p>Diese Website verwendet Cookies.</p>
+    <button id="s">Einstellungen</button><button id="a">Alle akzeptieren</button></div>
+  <main id="content"></main>
+  <script>
+    document.getElementById('a').onclick = () => {
+      document.getElementById('cookie-notice').remove();
+      document.getElementById('content').innerHTML = '<h1>Dachdeckerei</h1><p>Wir decken Steildächer, ' +
+        'sanieren Flachdächer und montieren Dachfenster im gesamten Landkreis mit eigenem Gerüstbau.</p>';
+      document.body.dataset.clicked = 'accept';
+    };
+  </script>
+</body></html>

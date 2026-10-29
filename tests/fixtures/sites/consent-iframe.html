@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Elektro Iframe Beispiel</title></head>
+<body>
+  <main id="content"></main>
+  <iframe id="sp_message_iframe" title="Cookie Consent" style="position:fixed;bottom:0;width:100%;height:200px"
+    srcdoc="<p>Wir nutzen Cookies und ähnliche Technologien.</p>
+            <button onclick=&quot;parent.postMessage('reject','*')&quot;>Alle ablehnen</button>
+            <button onclick=&quot;parent.postMessage('accept','*')&quot;>Accept all</button>"></iframe>
+  <script>
+    window.addEventListener('message', (e) => {
+      document.getElementById('sp_message_iframe').remove();
+      document.getElementById('content').innerHTML = '<h1>Elektroinstallation</h1><p>Wir installieren ' +
+        'Wallboxen, Photovoltaik und Smart-Home-Technik für Häuser und Betriebe in der Region Augsburg.</p>';
+      document.body.dataset.clicked = e.data;
+    });
+  </script>
+</body></html>

@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     crawl_retries: int = Field(2, ge=0, le=5)
     min_extraction_quality: float = Field(0.5, ge=0, le=1)
 
+    # Cookie-Banner: none = nie klicken, reject = höchstens "Ablehnen", reject_then_accept = notfalls zustimmen
+    consent_policy: str = Field("reject", pattern="^(none|reject|reject_then_accept)$")
+
     # --- Outreach ---
     contact_cooldown_days: int = Field(365, ge=0)   # Sperrfrist nach jedem Kontakt
 

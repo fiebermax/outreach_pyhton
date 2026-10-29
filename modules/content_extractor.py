@@ -45,6 +45,15 @@ _COPYRIGHT = re.compile(
     re.I,
 )
 
+# Consent-Banner: bekannte Tools (CCM19, Borlabs, Usercentrics, Cookiebot, …) und generische Namen.
+CONSENT_MARKER = re.compile(
+    r"cookie|consent|gdpr|dsgvo|\bcmp\b|ccm|borlabs|usercentrics|cookiebot|klaro|onetrust|complianz|"
+    r"cc-window|cc-banner|cookie-law|cookie-notice|tarteaucitron|iubenda|didomi|moove|uc-banner|cookieyes|cky-",
+    re.I,
+)
+_CONSENT_TEXT = re.compile(r"cookie|einwillig|zustimm|datenschutzeinstellung|privacy settings|consent", re.I)
+_KEEP_TAGS = {"html", "body", "main", "article"}
+
 _RELEVANT_LINK_WORDS = ("kontakt", "contact", "impressum", "imprint", "datenschutz", "privacy", "anfahrt")
 
 
@@ -76,6 +85,7 @@ class ExtractedContent:
     contact_links: list[str]             # interne Links zu Kontakt/Impressum/Datenschutz
     noscript_text: str
     js_signals: list[str] = field(default_factory=list)
+    consent_banners: list[str] = field(default_factory=list)   # entfernte Consent-Dialoge
 
 
 # --------------------------------------------------------------------------- Hilfsfunktionen
@@ -97,8 +107,32 @@ def _is_hidden(tag: Tag) -> bool:
     return "display:none" in style or "visibility:hidden" in style
 
 
+def remove_consent_elements(soup: BeautifulSoup) -> list[str]:
+    """Entfernt Cookie-/Consent-Dialoge und liefert eine kurze Beschreibung je Fund.
+
+    Entfernt wird nur ein Element, dessen id/class/aria-Label nach Consent aussieht UND dessen Text
+    nach Cookie-Hinweis klingt. <html>/<body>/<main> bleiben immer erhalten – manche Tools setzen
+    dort nur eine Klasse wie `ccm-blocked`.
+    """
+    found: list[str] = []
+    for tag in soup.find_all(True):
+        if tag.decomposed or tag.name in _KEEP_TAGS:
+            continue
+        ident = " ".join([tag.get("id") or "", " ".join(tag.get("class") or []), tag.get("aria-label") or ""])
+        is_dialog = tag.get("role") in ("dialog", "alertdialog") or tag.name == "dialog"
+        if not (CONSENT_MARKER.search(ident) or is_dialog):
+            continue
+        text = tag.get_text(" ", strip=True)
+        if not _CONSENT_TEXT.search(text + " " + ident) or len(text) > 6000:
+            continue
+        found.append(f"{tag.name}{'#' + tag['id'] if tag.get('id') else ''}: {_short(text, 60)}")
+        tag.decompose()
+    return found
+
+
 def _visible_soup(html: str) -> BeautifulSoup:
     soup = BeautifulSoup(html, "lxml")
+    remove_consent_elements(soup)
     for name in _INVISIBLE_TAGS:
         for tag in soup.find_all(name):
             tag.decompose()
@@ -297,9 +331,11 @@ def extract_content(html: str, page_url: str, current_year: int | None = None) -
     visible_text = _text_of(body)
     footer_text = find_footer(soup)
 
-    # Trafilatura bekommt HTML ohne <noscript>, sonst gilt "Bitte JavaScript aktivieren" als Inhalt.
+    # Trafilatura bekommt HTML ohne <noscript> und ohne Consent-Dialoge,
+    # sonst gelten "Bitte JavaScript aktivieren" oder Cookie-Texte als Inhalt.
     for tag in raw_soup.find_all("noscript"):
         tag.decompose()
+    consent_banners = remove_consent_elements(raw_soup)
     main_text = trafilatura.extract(str(raw_soup), url=page_url, include_comments=False, include_tables=True)
     main_text = _clean_whitespace(main_text) if main_text else None
 
@@ -318,4 +354,5 @@ def extract_content(html: str, page_url: str, current_year: int | None = None) -
         copyright_text=year_text, emails=extract_emails(visible_text, links, page_url),
         phone_numbers=extract_phones(visible_text, links, page_url), links=links, contact_links=contact_links,
         noscript_text=noscript_text, js_signals=_js_signals(BeautifulSoup(html, "lxml"), visible_text, noscript_text),
+        consent_banners=consent_banners,
     )

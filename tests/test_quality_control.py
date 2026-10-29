@@ -145,3 +145,28 @@ def test_site_nothing_usable_keeps_cause():
 
 def test_site_without_pages():
     assert assess_site([]).status is CrawlStatus.FAILED
+
+
+# --- Cookie-Banner ---
+
+def test_banner_text_never_counts_as_content():
+    """Echter Fall (hins-zimmerei.de): Banner-Text entfernt, Rest leer → nicht verwertbar."""
+    html = (SITES / "consent-accept-only.html").read_text(encoding="utf-8")
+    c = extract_content(html, URL)
+    assert "Cookie" not in c.cleaned_text and c.consent_banners
+    a = assess_page(cleaned_text=c.cleaned_text, title=c.title, heading_texts=[h.text for h in c.headings],
+                    js_signals=c.js_signals, consent_banners=c.consent_banners)
+    assert a.status is CrawlStatus.EMPTY_CONTENT and a.needs_rendering
+    assert "außer Cookie-Banner" in a.failure_reason
+    assert "hinter" not in a.failure_reason          # keine unbelegte Ursachenbehauptung
+
+
+def test_banner_after_rendering_is_final():
+    a = assess_page(cleaned_text="Zimmerei\nDachbau", title="Home", heading_texts=[],
+                    consent_banners=["div: Cookie gefällig?"], rendered=True)
+    assert a.status is CrawlStatus.EMPTY_CONTENT and not a.needs_rendering
+
+
+def test_banner_with_enough_content_is_fine():
+    a = assess_fixture("cookie-banner.html")
+    assert a.status.is_usable

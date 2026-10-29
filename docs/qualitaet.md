@@ -92,3 +92,22 @@ Die Wortgrenze von 150 bei Regel 1, 2 und 6 verhindert Fehlalarme: Eine lange Se
 - Echte Startseiten (29.10.2026): 7 von 8 Handwerkerseiten `SUCCESS` (Score 0,63–1,00),
   1 korrekt `JS_RENDERING_REQUIRED`. Händisch gegengeprüft im Quelltext, kein Fehlurteil gefunden.
 - Noch offen (Paket 4.5/4.7): größere gelabelte Stichprobe mit Fehlerquote.
+
+## Browser-Stufe und Cookie-Banner (Pakete 3.9–3.11)
+
+- Rendering im Handy-Viewport 375 px. Warten: `domcontentloaded` Pflicht, `networkidle` optional
+  (3 s, bei 2 von 8 echten Seiten nie erreicht), danach kurz auf sichtbaren Text.
+- **Overflow** zählt nur, wenn sich die Seite tatsächlich seitlich scrollen lässt. `scrollWidth`
+  allein meldet bei `overflow-x: hidden` 800 px statt 375 px – nachgewiesen mit
+  `overflow-hidden.html`. Verursacher-Elemente werden als Indiz gespeichert; eine breite Tabelle
+  in einem scrollbaren Container zählt nicht. Bei 8 echten Seiten: kein Overflow.
+- **Consent-Dialoge** werden vor jeder Textauswertung entfernt (bekannte Tools + generische
+  Namen, nur wenn der Text nach Cookie-Hinweis klingt; `<html>/<body>/<main>` nie).
+- **Klickregel** (`CONSENT_POLICY`): Standard `reject` – erst prüfen, ob der Inhalt ohne Klick
+  lesbar ist; wenn nicht, höchstens „Ablehnen/Nur notwendige“. „Akzeptieren“ nur bei
+  `reject_then_accept`. „Einstellungen“ wird nie geklickt. Jeder Klick wird protokolliert.
+  Buttons werden nur nach Beschriftung eingeordnet und nur in Frames mit Cookie-Kontext gesucht.
+- **Echter Fall hins-zimmerei.de:** Ohne Banner-Entfernung galt der Banner-Text als Inhalt
+  (41 Wörter, `PARTIAL_SUCCESS`) – Fehlurteil, behoben. Diagnose: Startseite hat auch nach
+  Zustimmung nur 3 Wörter und 6 Bilder. Die Statusmeldung behauptet deshalb keine Ursache,
+  sondern nennt nur das Gemessene.
