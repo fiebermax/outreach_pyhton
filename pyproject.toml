@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "outreach-system"
+version = "0.1.0"
+description = "Modulare Pipeline: lokale Unternehmen finden, Websites prüfen, Anti-Pitch-Entwürfe erstellen."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "httpx>=0.27,<1",
+    "beautifulsoup4>=4.12,<5",
+    "lxml>=5,<7",
+    "trafilatura>=1.12,<3",
+    "playwright==1.63.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-timeout>=2.3,<3",
+]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.setuptools.packages.find]
+include = ["modules*", "services*", "models*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 60
+addopts = "-ra"
