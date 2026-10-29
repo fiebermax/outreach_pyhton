@@ -20,6 +20,10 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 2.2 Schemas Crawl | erledigt | `tests/test_schemas.py` |
 | 2.3 Schemas Analyse | erledigt | `tests/test_schemas.py` |
 | 2.4 Normalisierung | erledigt | `tests/test_normalize.py` (`core/normalize.py`) |
+| 2.5 DB-Schema | erledigt | `tests/test_database.py` |
+| 2.6 Repository-Schicht | erledigt | `tests/test_database.py` |
+| 2.7 Duplikat-Erkennung | erledigt | `tests/test_database.py` + Probelauf mit echten Places-Daten |
+| 2.8 Job-Schritte | erledigt | `tests/test_database.py` |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.
@@ -93,6 +97,7 @@ Legende: **Ergebnis** = was danach existiert · **Abnahme** = wie man prüft, da
 | 5.4 | Optionaler zweiter Adapter | z. B. OpenStreetMap/Overpass (kostenlos) als Fallback | Tests mit Mock | 5.2 |
 | 5.5 | Cache | Erfolgreiche API-Antworten nach (Quelle, Ort, Branche, Seite) zwischenspeichern | Test: zweiter Aufruf → kein HTTP | 5.3 |
 | 5.6 | Speichern + Export | Leads via Upsert (2.7) in DB, optional JSON-Export | Test: 2 Läufe → keine Dubletten | 2.7, 5.3 |
+| 5.7 | Verzeichnisprofile erkennen | Website-URL, die auf ein Branchenverzeichnis/Social-Profil zeigt (z. B. `firmen.tv/...`, `fensterbau.io/...`, Facebook), als „keine eigene Website“ markieren: nicht crawlen und kritisieren, sondern als eigenes Lead-Signal speichern | Tests mit den echten Beispielen aus Jettingen-Scheppach | 5.3 |
 
 ## Phase 6 – Website-Prüfungen und KI-Analyse
 
