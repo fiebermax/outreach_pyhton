@@ -31,6 +31,11 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 3.5 Kontakt-Extraktion | erledigt | `tests/test_content_extractor.py` + 8 echte Seiten |
 | 3.6 Footer + Copyright | erledigt | `tests/test_content_extractor.py` |
 | 3.7 Trafilatura-Vergleich | erledigt | Regeln in `docs/qualitaet.md` |
+| 4.1 Kriterien dokumentieren | erledigt | `docs/qualitaet.md` |
+| 4.2 Qualitätsbewertung Seite | erledigt | `tests/test_quality_control.py` + 10 echte Seiten |
+| 4.3 Website-Ebene | erledigt | `tests/test_quality_control.py` |
+| 4.4 Website- vs. Scraper-Fehler | erledigt | `tests/test_quality_control.py` |
+| 4.6 Schutz-Test | erledigt | `tests/test_database.py::test_report_for_bad_crawl_is_refused` |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
 damit Modulnamen wie `errors` oder `retry` nicht mit anderen Paketen kollidieren.

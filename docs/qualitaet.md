@@ -53,3 +53,42 @@ Nur Startseiten, Stufen 1–3. Keine Statistik, sondern Anlass für Regeln:
 - 3 Telefonnummern wurden zunächst übersehen (`+ 49`, URL-kodierter `tel:`-Link,
   Beschriftung in eigenem Element) – behoben, jetzt Testfälle.
 - Echter Tippfehler gefunden („Innen-AuBenputz“ in einer Überschrift), echter kaputter `tel:`-Link.
+
+## Qualitätsbewertung einer Seite – `quality_control.assess_page`
+
+Die erste zutreffende Regel entscheidet:
+
+| # | Bedingung | Status | Browser-Stufe? |
+|---|---|---|---|
+| 1 | Schutz-Hinweis (Captcha, „Just a moment…“, Access denied) in Titel/Überschriften/Textanfang **und** < 150 Wörter | `BLOCKED` | nein – wird nie umgangen |
+| 2 | Fehlerhinweis (404, „Seite nicht gefunden“, 5xx-Text) in Titel/H1–H2 **und** < 150 Wörter | `HTTP_ERROR` (Soft-404) | nein |
+| 3 | < 15 Wörter, JS-Hinweise, noch nicht gerendert | `JS_RENDERING_REQUIRED` | ja |
+| 4 | < 15 Wörter, ohne JS-Hinweis, noch nicht gerendert | `EMPTY_CONTENT` | ja (einmal versuchen) |
+| 5 | < 15 Wörter nach Rendering | `EMPTY_CONTENT` | nein – endgültig |
+| 6 | Platzhalter („im Aufbau“, „coming soon“, Domain zu verkaufen) **und** < 150 Wörter | `EMPTY_CONTENT` | nein |
+| 7 | ≥ 50 Wörter **und** Score ≥ `MIN_EXTRACTION_QUALITY` (Standard 0,5) | `SUCCESS` | wenn JS-Hinweise und < 100 Wörter |
+| 8 | sonst | `PARTIAL_SUCCESS` | wie 7 |
+
+Die Wortgrenze von 150 bei Regel 1, 2 und 6 verhindert Fehlalarme: Eine lange Seite, die
+„Captcha“ oder „404“ im Text erwähnt, ist keine Sperr- oder Fehlerseite.
+
+**Score (0–1)** = 0,45 × Textmenge (Wörter / 150, max. 1) + 0,25 × Anteil eindeutiger Zeilen
++ 0,15 × Überschrift vorhanden + 0,15 × Titel (1 = aussagekräftig, 0,5 = generisch wie „Home“).
+
+## Website-Ebene – `quality_control.assess_site`
+
+- Startseite und alle angefragten Unterseiten verwertbar → `SUCCESS`
+- Unterseite fehlgeschlagen oder Startseite nur teilweise → `PARTIAL_SUCCESS`
+- Startseite unbrauchbar, Unterseite verwertbar → `PARTIAL_SUCCESS`
+- nichts verwertbar → Status der Startseite, damit die Ursache erhalten bleibt
+  (`BLOCKED`/`TIMEOUT`/`HTTP_ERROR`/`INVALID_URL` = Website nicht zugänglich;
+  `EMPTY_CONTENT`/`JS_RENDERING_REQUIRED`/`FAILED` = Extraktion gescheitert)
+- Eine nicht verlinkte Unterseite (z. B. fehlendes Impressum) ist ein möglicher Befund der
+  Website, kein unvollständiger Crawl.
+
+## Stand der Validierung
+
+- Lokale Fixtures: alle 6 Seitentypen erhalten den erwarteten Status (`tests/test_quality_control.py`).
+- Echte Startseiten (29.10.2026): 7 von 8 Handwerkerseiten `SUCCESS` (Score 0,63–1,00),
+  1 korrekt `JS_RENDERING_REQUIRED`. Händisch gegengeprüft im Quelltext, kein Fehlurteil gefunden.
+- Noch offen (Paket 4.5/4.7): größere gelabelte Stichprobe mit Fehlerquote.
