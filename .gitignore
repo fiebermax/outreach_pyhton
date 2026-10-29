@@ -21,3 +21,6 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Lokale Pakete (enthalten ggf. .env mit Zugangsdaten)
+*.zip
