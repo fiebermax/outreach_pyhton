@@ -199,6 +199,14 @@ class PageResult(_Model):
     document_width: int | None = Field(default=None, gt=0)
     horizontal_overflow: bool | None = None           # None = nicht gemessen
     overflow_culprits: list[OverflowCulprit] = Field(default_factory=list)
+    # Messwerte für deterministische Prüfungen (Phase 6)
+    has_viewport_meta: bool | None = None
+    has_h1: bool | None = None
+    internal_links: list[str] = Field(default_factory=list)   # max. 150, für Linkprüfung
+    redirect_chain: list[str] = Field(default_factory=list)   # "301 http://… " je Sprung
+    response_seconds: float | None = Field(default=None, ge=0)
+    html_bytes: int | None = Field(default=None, ge=0)
+    word_count: int | None = Field(default=None, ge=0)        # sichtbarer Text, auch wenn unbrauchbar
     extraction_method: ExtractionMethod = ExtractionMethod.NONE
     extraction_quality: float = Field(default=0.0, ge=0, le=1)
     crawl_status: CrawlStatus

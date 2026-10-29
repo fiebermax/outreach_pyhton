@@ -72,9 +72,16 @@ def _enough_text(html: str) -> bool:
 
 def _page_result(url: str, content: ExtractedContent, assessment: QualityAssessment, *, final_url: str,
                  http_status: int | None, method: ExtractionMethod, html_ref: str | None,
-                 render: RenderResult | None) -> PageResult:
+                 render: RenderResult | None, response=None) -> PageResult:
     usable = assessment.status.is_usable
+    internal = list(dict.fromkeys(l.url.split("#")[0] for l in content.links if l.internal))[:150]
     return PageResult(
+        has_viewport_meta=content.has_viewport_meta, has_h1=any(h.level == 1 for h in content.headings),
+        internal_links=internal,
+        redirect_chain=[f"{status} {u}" for status, u in response.redirects] if response else [],
+        response_seconds=round(response.elapsed_seconds, 2) if response else None,
+        html_bytes=response.size_bytes if response else None,
+        word_count=len(content.visible_text.split()),
         url=url, final_url=final_url, http_status=http_status, page_title=content.title,
         meta_description=content.meta_description, raw_html_reference=html_ref,
         cleaned_text=content.cleaned_text if usable else "", headings=content.headings,
@@ -146,7 +153,7 @@ class SiteCrawler:
 
         html_ref = self.html_store.save(html) if self.html_store else None
         page = _page_result(url, content, assessment, final_url=final_url, http_status=http_status,
-                            method=method, html_ref=html_ref, render=render)
+                            method=method, html_ref=html_ref, render=render, response=response)
         return PageOutcome(page, links=content.links, content=content, assessment=assessment, render=render,
                            notes=notes)
 

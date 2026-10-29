@@ -50,6 +50,7 @@ keine bestehenden Skripte, keine Datenbank. Es gibt nichts zu übernehmen oder z
 | 5.6 Speichern + Export | erledigt | Upsert ohne Dubletten, `export_leads` |
 | 5.7 Verzeichnisprofile | erledigt | `website_kind` = own / directory / none |
 | 5.8 Nische anwenden | erledigt | Branche, Passung, Umkreis, Lauf- und Monatslimit |
+| 6.1–6.8 Deterministische Prüfungen | erledigt | `modules/website_checks.py`, `tests/test_website_checks.py` – 17 Befundtypen, alle mit Beleg |
 | N.2 Nischenprofil (Zusatz) | erledigt | `niche.toml`, `tests/test_niche.py` mit 19 echten Firmen |
 
 Abweichung von der Zielstruktur: Fehlertypen, Logging und Retry liegen in `core/`,
