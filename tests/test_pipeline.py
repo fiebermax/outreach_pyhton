@@ -151,3 +151,69 @@ def test_apply_overrides():
     assert niche.region.orte == ["Burgau"] and [b.name for b in niche.branche] == ["Maler/Stuckateur"]
     with pytest.raises(SystemExit):
         apply_overrides(load_niche(), None, "Bäcker")
+
+
+# --- Excel-Übersicht und Oberfläche ---
+
+def test_excel_shows_what_needs_manual_review(env, tmp_path):
+    from openpyxl import load_workbook
+
+    from modules.excel_export import export_excel
+    db, settings, ids = env
+    run_all(db, settings)
+    path, total, manual = export_excel(db, tmp_path / "firmen.xlsx", settings.data_dir)
+    assert (total, manual) == (4, 3)
+    ws = load_workbook(path)["Firmen"]
+    header = [c.value for c in ws[1]]
+    rows = {r[header.index("ID")]: dict(zip(header, r)) for r in ws.iter_rows(min_row=2, values_only=True)}
+    assert rows[ids["good"]]["Manuell prüfen"] == "Nein" and rows[ids["good"]]["Entwurf"] == "erledigt"
+    assert rows[ids["dir"]]["Manuell prüfen"] == "Ja" and "Verzeichnis" in rows[ids["dir"]]["Grund"]
+    assert rows[ids["blocked"]]["Manuell prüfen"] == "Ja" and "BLOCKED" in rows[ids["blocked"]]["Grund"]
+    first = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
+    assert first[header.index("Manuell prüfen")] == "Ja"                    # Manuelles steht oben
+    assert load_workbook(path)["Befunde"].max_row >= 2
+
+
+def test_main_export_command(env, capsys):
+    db, settings, _ = env
+    assert main(["export"], settings=settings, niche=load_niche()) == 0
+    assert (settings.data_dir / "firmen.xlsx").exists() and "manuell prüfen" in capsys.readouterr().out
+
+
+def test_ui_check_report_and_downloads(env, site_server):
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    import httpx
+
+    from modules.browser import BrowserLimits
+    from modules.design_review import review_site
+    from modules import web_ui
+    db, settings, ids = env
+    run_all(db, settings)
+
+    async def local_review(url, data_dir, llm=None):          # Testserver läuft auf 127.0.0.1
+        return await review_site(url, data_dir, llm, limits=BrowserLimits(navigation_timeout_seconds=5,
+                                                                          networkidle_timeout_seconds=1,
+                                                                          allow_local=True))
+    original = web_ui.review_site
+    web_ui.review_site = local_review
+    server = ThreadingHTTPServer(("127.0.0.1", 0), web_ui.make_handler(settings, lambda: None))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with httpx.Client(base_url=base, timeout=60) as http:
+            index = http.get("/").text
+            assert "Schreinerei Beispiel" in index and "manuell prüfen" in index
+            r = http.post("/pruefen", data={"url": site_server + "/design-old.html"})
+            assert r.status_code == 303 and r.headers["location"] == "/bericht?d=127.0.0.1"
+            report = http.get("/bericht?d=127.0.0.1").text
+            assert "sehr veraltet" in report and "Tabellen" in report
+            shot = http.get("/datei?d=127.0.0.1&f=desktop.png&download=1")
+            assert shot.content[:4] == b"\x89PNG" and "attachment" in shot.headers["content-disposition"]
+            assert http.get("/datei?d=127.0.0.1&f=../../t.db").status_code == 404
+            assert http.get("/excel").content[:2] == b"PK"
+    finally:
+        web_ui.review_site = original
+        server.shutdown()
+        server.server_close()

@@ -4,9 +4,9 @@ Wenige, konkrete, belegte Probleme zählen – nicht die Länge der Fehlerliste.
 
 Belastbar ("eligible") ist ein Befund nur, wenn
 - er gemessen oder direkt beobachtet ist und `confidence` ≥ 0,6, oder
-- er ein KI-Rechtschreib-/Grammatikbefund mit exaktem Zitat und `confidence` ≥ 0,7 ist, oder
-- er eine andere KI-Einschätzung mit `confidence` ≥ 0,75 ist (selten; nach den ersten echten
+- er eine KI-Einschätzung mit `confidence` ≥ 0,75 ist (selten; nach den ersten echten
   Ergebnissen sind diese Einschätzungen deutlich schwächer).
+Rechtschreib-/Grammatikbefunde (aus älteren Läufen) zählen nie: Tippfehler sind kein Gesprächsanlass.
 
 Wert eines Befunds = Schwere × geschäftliche Relevanz × Belegqualität × Sicherheit
                      × Passung zum eigenen Angebot (niche.toml [angebot]).
@@ -29,6 +29,7 @@ MIN_ANALYSIS_QUALITY = 0.6
 MAX_PITCH_FINDINGS = 2
 # Befunde, die als Gesprächsanlass nicht taugen, auch wenn sie stimmen.
 NOT_PITCHABLE = {"impressum_link_not_found", "html_very_large", "slow_server_response"}
+NOT_PITCHABLE_CATEGORIES = {FindingCategory.SPELLING, FindingCategory.GRAMMAR}
 
 
 @dataclass
@@ -49,15 +50,12 @@ class ScoringResult:
 
 
 def is_eligible(f: Finding) -> bool:
-    if f.issue_id in NOT_PITCHABLE:
+    if f.issue_id in NOT_PITCHABLE or f.category in NOT_PITCHABLE_CATEGORIES:
         return False
-    if f.severity is Severity.LOW and f.business_relevance is Severity.LOW and f.category not in (
-            FindingCategory.SPELLING, FindingCategory.GRAMMAR):
+    if f.severity is Severity.LOW and f.business_relevance is Severity.LOW:
         return False        # z. B. Telefonnummer nur im Impressum: stimmt, ist aber kein Gesprächsanlass
     if f.evidence_type is not EvidenceType.AI_INTERPRETATION:
         return f.confidence >= 0.6
-    if f.category in (FindingCategory.SPELLING, FindingCategory.GRAMMAR):
-        return f.confidence >= 0.7 and (f.measurement or {}).get("quote_match") == 1.0
     return f.confidence >= 0.75
 
 

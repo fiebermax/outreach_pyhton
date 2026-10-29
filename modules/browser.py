@@ -296,3 +296,42 @@ class BrowserRenderer:
             raise BrowserCrashed(f"Browserfehler: {str(exc)[:200]}") from exc
         finally:
             await context.close()
+
+    async def capture(self, url: str, viewport: dict, screenshot_path, evaluate: str | None = None,
+                      max_height: int = 6000):
+        """Screenshot für die Design-Prüfung (Cookie-Banner wie beim Crawl höchstens abgelehnt).
+
+        Liefert (endgültige URL, Ergebnis von `evaluate` oder None). Ganze Seite, höchstens `max_height` px hoch.
+        """
+        url = normalize_url(url, allow_local=self.limits.allow_local)
+        if self._browser is None or not self._browser.is_connected():
+            raise BrowserCrashed("Browser nicht gestartet oder abgestürzt")
+        context = await self._browser.new_context(viewport=viewport, locale="de-DE")
+        try:
+            page = await context.new_page()
+            try:
+                response = await page.goto(url, wait_until="domcontentloaded",
+                                           timeout=self.limits.navigation_timeout_seconds * 1000)
+            except PlaywrightTimeout as exc:
+                raise FetchTimeout(f"Browser: Seite nach {self.limits.navigation_timeout_seconds}s nicht geladen") from exc
+            except PlaywrightError as exc:
+                raise NetworkError(f"Browser: {str(exc).splitlines()[0][:200]}") from exc
+            if response is not None and (error := error_for_http_status(response.status, page.url)) is not None:
+                raise error
+            try:
+                await page.wait_for_load_state("networkidle", timeout=self.limits.networkidle_timeout_seconds * 1000)
+            except PlaywrightTimeout:
+                pass
+            await self._handle_consent(page, None)
+            await page.wait_for_timeout(500)          # Animationen/Lazy-Load kurz zur Ruhe kommen lassen
+            data = await _frame_eval(page.main_frame, evaluate, timeout=10.0) if evaluate else None
+            height = await page.evaluate("Math.max(document.documentElement.scrollHeight, document.body ? "
+                                         "document.body.scrollHeight : 0)")
+            await page.screenshot(path=str(screenshot_path), full_page=True,
+                                  clip={"x": 0, "y": 0, "width": viewport["width"],
+                                        "height": max(viewport["height"], min(int(height or 0), max_height))})
+            return page.url, data
+        except PlaywrightError as exc:
+            raise BrowserCrashed(f"Browserfehler: {str(exc)[:200]}") from exc
+        finally:
+            await context.close()

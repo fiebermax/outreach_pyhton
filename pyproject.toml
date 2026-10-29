@@ -15,6 +15,7 @@ dependencies = [
     "lxml>=5,<7",
     "trafilatura>=1.12,<3",
     "playwright==1.63.0",
+    "openpyxl>=3.1,<4",
 ]
 
 [project.optional-dependencies]

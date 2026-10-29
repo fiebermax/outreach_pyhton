@@ -5,6 +5,8 @@ Beispiele:
     python main.py run --ort Burgau --branche Maler --max-queries 4
     python main.py status
     python main.py drafts
+    python main.py export                       # Excel-Übersicht data/firmen.xlsx
+    python main.py ui                           # Oberfläche: Screenshot + Design-Urteil
     python main.py retry --lead 12 --step crawl
     python main.py contacts import docs/kontakte_vorlage.csv
     python main.py contact --lead 12 --kanal telefon --ergebnis kein_interesse --notiz "will nicht"
@@ -109,6 +111,7 @@ def cmd_run(db: Database, settings: Settings, niche: NicheProfile, args) -> None
     print_report("Bewertung", scored)
     print_report("Entwürfe", drafted)
     print(f"\nEntwürfe liegen in {settings.data_dir / 'drafts'} – es wurde nichts versendet.")
+    cmd_export(db, settings, niche, args)
 
 
 def cmd_status(db: Database, *_args) -> None:
@@ -147,6 +150,18 @@ def cmd_leads(db: Database, *_args) -> None:
         score = "–" if r["score"] is None else f"{r['score']:.0f}"
         print(f"#{r['id']:<4} {score:>4}  {r['name'][:38]:<38} {r['niche_branch'] or '–':<20} "
               f"{r['website_kind'] or '–':<9} {r['draft'] or ''}")
+
+
+def cmd_export(db: Database, settings: Settings, niche: NicheProfile, args) -> None:
+    from modules.excel_export import export_excel
+    path, total, manual = export_excel(db, getattr(args, "datei", None) or settings.data_dir / "firmen.xlsx",
+                                       settings.data_dir)
+    print(f"Excel-Übersicht: {path} ({total} Firmen, davon {manual} manuell prüfen)")
+
+
+def cmd_ui(db: Database, settings: Settings, niche: NicheProfile, args) -> None:
+    from modules.web_ui import serve
+    serve(settings, lambda: make_llm(settings), port=args.port, open_browser=not args.no_browser)
 
 
 def cmd_retry(db: Database, settings: Settings, niche: NicheProfile, args) -> None:
@@ -218,6 +233,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("leads", help="Unternehmen mit Score")
     sub.add_parser("drafts", help="Entwürfe anzeigen")
 
+    export = sub.add_parser("export", help="Excel-Übersicht aller Firmen (Standard: data/firmen.xlsx)")
+    export.add_argument("--datei", type=Path)
+
+    ui = sub.add_parser("ui", help="Oberfläche im Browser: Screenshot + Design-Urteil, Firmenliste, Excel")
+    ui.add_argument("--port", type=int, default=8765)
+    ui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch öffnen")
+
     retry = sub.add_parser("retry", help="Schritt für ein Unternehmen zurücksetzen")
     retry.add_argument("--lead", type=int, required=True)
     retry.add_argument("--step", choices=[s.value for s in Step] + ["all"], required=True)
@@ -258,7 +280,7 @@ def main(argv: list[str] | None = None, settings: Settings | None = None, niche:
     db = Database(settings.database_path)
     handlers = {"run": cmd_run, "find": cmd_find, "status": cmd_status, "leads": cmd_leads, "drafts": cmd_drafts,
                 "retry": cmd_retry, "contacts": cmd_contacts, "contact": cmd_contact, "block": cmd_block,
-                "approve": cmd_approve, "send": cmd_send}
+                "approve": cmd_approve, "send": cmd_send, "export": cmd_export, "ui": cmd_ui}
     try:
         handlers[args.command](db, settings, niche, args)
     except (SendNotAllowed, MissingCredentialError) as exc:

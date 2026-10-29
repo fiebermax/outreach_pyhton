@@ -17,8 +17,11 @@ def f(issue_id="phone_not_clickable", category=FindingCategory.CONTACT, evidence
                    business_relevance=relevance, measurement=measurement)
 
 
+# Tippfehler aus älteren Läufen: stimmen, sind aber kein Gesprächsanlass
 TYPO = f("ai_spelling_1", FindingCategory.SPELLING, "„Innen-AuBenputz“ → „Innen-Außenputz“",
          EvidenceType.AI_INTERPRETATION, 0.85, relevance=Severity.LOW, measurement={"quote_match": 1.0})
+COPYRIGHT = f("copyright_outdated", FindingCategory.MAINTENANCE, "© 2019",
+              measurement={"copyright_year": 2019, "current_year": 2026})
 WEAK_AI = f("ai_clarity_2", FindingCategory.CLARITY, "„Sonstiges“", EvidenceType.AI_INTERPRETATION, 0.5)
 
 
@@ -31,7 +34,8 @@ def inp(*findings, quality=1.0, **kw):
 # --- Scoring ---
 
 def test_eligibility_rules():
-    assert is_eligible(f()) and is_eligible(TYPO)
+    assert is_eligible(f()) and is_eligible(COPYRIGHT)
+    assert not is_eligible(TYPO)                                          # Tippfehler zählen nie
     assert not is_eligible(WEAK_AI)                                       # schwache KI-Einschätzung
     assert not is_eligible(f(confidence=0.55))                            # zu unsicher
     assert not is_eligible(f("impressum_link_not_found", FindingCategory.LEGAL))   # kein Gesprächsanlass
@@ -58,7 +62,7 @@ def test_no_invented_reasons_when_only_weak_findings():
 def test_score_prefers_few_strong_findings_and_niche():
     niche = load_niche()
     one = score_lead(inp(f()), niche).score.score
-    two = score_lead(inp(f(), TYPO), niche).score.score
+    two = score_lead(inp(f(), COPYRIGHT), niche).score.score
     many_weak = score_lead(inp(f(), *[WEAK_AI] * 10), niche).score.score
     assert 0 < one < two <= 100 and many_weak == one                     # Masse schwacher Befunde zählt nicht
     assert score_lead(inp(f(), niche_fit=0.6), niche).score.score < one
@@ -67,21 +71,21 @@ def test_score_prefers_few_strong_findings_and_niche():
 def test_pitch_findings_limited_to_two_best():
     mobile = f("horizontal_overflow_mobile", FindingCategory.MOBILE, "Bei 375px ...", EvidenceType.MEASURED, 0.8,
                measurement={"viewport_width": 375, "document_width": 640, "culprit": "div.hero"})
-    result = score_lead(inp(TYPO, f(), mobile), load_niche())
+    result = score_lead(inp(COPYRIGHT, TYPO, f(), mobile), load_niche())
     assert [x.issue_id for x in result.pitch_findings] == ["horizontal_overflow_mobile", "phone_not_clickable"]
 
 
 # --- Anti-Pitch ---
 
 def test_draft_structure_and_lint():
-    draft = build_draft([f(), TYPO], "info@nh-bauunternehmen.de", SENDER)
+    draft = build_draft([f(), COPYRIGHT], "info@nh-bauunternehmen.de", SENDER)
     body = draft.body
     assert body.startswith("Guten Tag,")
     assert "nh-bauunternehmen.de" in body and "Telefon: 08225 12345" in body
-    assert "„Innen-AuBenputz“, gemeint ist vermutlich „Innen-Außenputz“" in body
+    assert "Außerdem: im Footer Ihrer Website steht noch „© 2019“." in body
     assert "Webdesigner aus Jettingen-Scheppach" in body and "keine weiteren Nachrichten" in body
-    assert draft.finding_ids == ["phone_not_clickable", "ai_spelling_1"]
-    assert lint_draft(draft, [f(), TYPO], SENDER) == []
+    assert draft.finding_ids == ["phone_not_clickable", "copyright_outdated"]
+    assert lint_draft(draft, [f(), COPYRIGHT], SENDER) == []
     assert body.index("Telefon: 08225") < body.index("Webdesigner")      # Vorstellung erst am Ende
 
 
@@ -105,7 +109,6 @@ def test_lint_catches_violations():
     f("no_https", FindingCategory.ACCESSIBILITY, "Endgültige Adresse: http://x.de/", EvidenceType.MEASURED,
       measurement={"final_url": "http://x.de/"}),
     f("homepage_almost_no_text", FindingCategory.CLARITY, "3 Wörter", EvidenceType.MEASURED, measurement={"words": 3}),
-    TYPO,
 ])
 def test_every_block_passes_lint(finding):
     draft = build_draft([finding], "info@x.de", SENDER)
@@ -116,8 +119,14 @@ def test_every_block_passes_lint(finding):
 def test_low_relevance_finding_not_pitched():
     impressum_phone = f(severity=Severity.LOW, relevance=Severity.LOW, url=URL + "impressum")
     assert not is_eligible(impressum_phone)
-    result = score_lead(inp(impressum_phone, TYPO), load_niche())
-    assert [x.issue_id for x in result.pitch_findings] == ["ai_spelling_1"]
+    result = score_lead(inp(impressum_phone, COPYRIGHT), load_niche())
+    assert [x.issue_id for x in result.pitch_findings] == ["copyright_outdated"]
+
+
+def test_typo_alone_is_no_reason_to_write():
+    result = score_lead(inp(TYPO), load_niche())
+    assert result.score.disqualified and "kein belastbarer Befund" in result.score.disqualification_reasons
+    assert build_draft([TYPO], "a@b.de", SENDER) is None
 
 
 def test_sentence_start_keeps_case():
@@ -128,7 +137,7 @@ def test_sentence_start_keeps_case():
 def test_drafts_contain_no_generic_ai_phrases():
     phrases = ["ich hoffe, diese nachricht", "in der heutigen digitalen", "zögern sie nicht", "spannend",
                "potenzial", "optimieren sie", "ihr online-auftritt", "digitale präsenz", "auf ein neues level"]
-    for finding in [f(), TYPO, f("no_https", FindingCategory.ACCESSIBILITY, "http", EvidenceType.MEASURED,
+    for finding in [f(), COPYRIGHT, f("no_https", FindingCategory.ACCESSIBILITY, "http", EvidenceType.MEASURED,
                                   measurement={"final_url": "http://x.de/"})]:
         body = build_draft([finding], "a@b.de", SENDER).body.lower()
         assert not any(p in body for p in phrases), body

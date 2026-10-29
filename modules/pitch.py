@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from models.schemas import EmailDraft, Finding, FindingCategory
+from models.schemas import EmailDraft, Finding
 
 
 @dataclass(frozen=True)
@@ -47,11 +47,6 @@ def _path(url: str) -> str:
 def _sentence_start(text: str) -> str:
     """Nur den ersten Buchstaben groß – str.capitalize() würde den Rest kleinschreiben ("Auf der seite …")."""
     return text[:1].upper() + text[1:]
-
-
-def _quote_parts(f: Finding) -> tuple[str, str | None]:
-    m = re.match(r"„(.+?)“(?: → „(.+?)“)?$", f.evidence)
-    return (m.group(1), m.group(2)) if m else (f.evidence, None)
 
 
 def block_for(f: Finding) -> Block | None:
@@ -101,14 +96,6 @@ def block_for(f: Finding) -> Block | None:
                      "nicht akzeptiert wird.",
                      "Besucher kommen erst nach einem zusätzlichen Klick auf „Trotzdem fortfahren“ auf die Seite.",
                      "Das Zertifikat muss erneuert oder korrekt eingerichtet werden.")
-    if f.category in (FindingCategory.SPELLING, FindingCategory.GRAMMAR) and issue.startswith("ai_"):
-        quote, correction = _quote_parts(f)
-        if not correction:
-            return None
-        return Block(f"Kleiner Tippfehler auf {d}",
-                     f"{_path(f.source_url)} steht „{quote}“, gemeint ist vermutlich „{correction}“.",
-                     "Eine Kleinigkeit, die sich schnell korrigieren lässt.",
-                     "")
     if issue == "copyright_outdated":
         return Block(f"Jahreszahl auf {d}",
                      f"im Footer Ihrer Website steht noch „{f.evidence}“.",

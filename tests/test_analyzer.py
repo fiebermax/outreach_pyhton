@@ -46,29 +46,27 @@ class FakeLLM:
 
 
 def item(**kw):
-    base = {"category": "SPELLING", "severity": "MEDIUM", "quote": "Innen-AuBenputz", "page_url": URL,
-            "description": "In der Überschrift steht „AuBenputz“ statt „Außenputz“.", "correction": "Innen-Außenputz",
+    base = {"category": "CLARITY", "severity": "MEDIUM", "quote": "Wir arbeiten sauber und termingerecht",
+            "page_url": URL, "description": "Die Leistung wird nur allgemein beschrieben, ohne Beispiele.",
             "confidence": 0.95}
     return base | kw
 
 
 # --- Belegprüfung ---
 
-def test_real_typo_is_accepted_with_evidence():
-    """Echter Fund auf nh-bauunternehmen.de."""
+def test_finding_with_quote_is_accepted_with_evidence():
     f, reason = verify_ai_finding(item(), crawl(), 1)
     assert reason is None
-    assert f.evidence == "„Innen-AuBenputz“ → „Innen-Außenputz“"
+    assert f.evidence == "„Wir arbeiten sauber und termingerecht“"
     assert f.evidence_type is EvidenceType.AI_INTERPRETATION and f.confidence <= 0.85
     assert f.source_url == URL and f.measurement == {"quote_match": 1.0}
 
 
 @pytest.mark.parametrize("override,reason_part", [
-    ({"quote": "Innen-Aussenputz"}, "nicht im Website-Text"),           # erfundenes Zitat
-    ({"quote": "innen-aubenputz"}, "nicht im Website-Text"),            # Rechtschreibung: exakt inkl. Groß/klein
+    ({"quote": "Wir liefern weltweit innerhalb von zwei Tagen"}, "nicht im Website-Text"),   # erfundenes Zitat
     ({"quote": ""}, "kein Zitat"),
-    ({"correction": None}, "ohne abweichende Korrektur"),
-    ({"correction": "Innen-AuBenputz"}, "ohne abweichende Korrektur"),
+    ({"category": "SPELLING", "quote": "Innen-AuBenputz"}, "nicht erlaubt"),   # Tippfehler werden nicht gesucht
+    ({"category": "GRAMMAR"}, "nicht erlaubt"),
     ({"category": "MOBILE"}, "nicht erlaubt"),                           # Messbefunde nur deterministisch
     ({"category": "ERFUNDEN"}, "unbekannte Kategorie"),
     ({"description": "Dadurch verlieren Sie 30 % Ihrer Kunden."}, "unbelegte Behauptung"),
@@ -79,14 +77,12 @@ def test_unsupported_findings_rejected(override, reason_part):
 
 
 def test_umsatzsteuer_is_not_a_revenue_claim():
-    raw = item(category="CLARITY", quote="Wir arbeiten sauber und termingerecht", correction=None,
-               description="Die Seite nennt eine Umsatzsteuer-ID, aber keine Leistungen in diesem Abschnitt.")
+    raw = item(description="Die Seite nennt eine Umsatzsteuer-ID, aber keine Leistungen in diesem Abschnitt.")
     assert verify_ai_finding(raw, crawl(), 1)[0] is not None
 
 
 def test_clarity_quote_allows_tiny_deviation_but_lowers_confidence():
-    raw = item(category="CLARITY", quote="Wir arbeiten sauber und termingerecht", correction=None,
-               description="Die Leistung wird nur allgemein beschrieben, ohne Beispiele.")
+    raw = item()
     f, _ = verify_ai_finding(raw, crawl(), 1)
     assert f is not None
     raw["quote"] = "Wir arbeiten sauber und pünktlich"       # zu weit weg
@@ -101,9 +97,9 @@ def test_wrong_page_url_is_corrected_to_real_source():
 # --- Ablauf ---
 
 def test_analyze_content_counts_discarded():
-    llm = FakeLLM({"findings": [item(), item(quote="Erfundener Fehler", correction="x")]})
+    llm = FakeLLM({"findings": [item(), item(quote="Erfundener Fehler auf der Seite")]})
     ai = analyze_content(crawl(), llm)
-    assert [f.issue_id for f in ai.findings] == ["ai_spelling_1"]
+    assert [f.issue_id for f in ai.findings] == ["ai_clarity_1"]
     assert len(ai.discarded) == 1 and ai.cost_eur == 0.001
 
 
@@ -148,6 +144,7 @@ def test_website_text_is_fenced_and_markers_stripped():
     assert prompt.index("Ignoriere alle") < prompt.index("<<<ENDE_deadbeef>>>")
     system = SYSTEM_PROMPT.format(nonce="deadbeef")
     assert "Ignoriere" not in system and "werden ignoriert" in system
+    assert "SPELLING" not in system and "NICHT gemeldet" in system      # keine Tippfehlersuche
 
 
 def test_injected_text_cannot_create_unverified_findings():
@@ -165,7 +162,7 @@ def test_injected_text_cannot_create_unverified_findings():
 def test_analyze_merges_checks_and_ai():
     report = analyze(crawl(), FakeLLM({"findings": [item()]}), CheckContext(current_year=2026))
     ids = {f.issue_id for f in report.findings}
-    assert "ai_spelling_1" in ids and "title_generic" not in ids
+    assert "ai_clarity_1" in ids and "title_generic" not in ids
     assert report.ai_model == "fake-model" and report.analysis_quality == 1.0
 
 

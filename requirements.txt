@@ -6,6 +6,7 @@ beautifulsoup4>=4.12,<5
 lxml>=5,<7
 trafilatura>=1.12,<3
 playwright==1.63.0
+openpyxl>=3.1,<4
 
 # Entwicklung / Tests
 pytest>=8,<9

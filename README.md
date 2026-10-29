@@ -22,12 +22,16 @@ niche.toml ──► Lead-Suche (Google Places) ──► Datenbank (Duplikate, 
 Crawl je Website: HTTP → HTML-Text → Trafilatura → (bei Bedarf) Browser + Handy-Layout
         │          Qualitätskontrolle entscheidet: verwertbar? nächste Stufe? Fehlergrund?
         ▼
-Analyse: deterministische Prüfungen (HTTPS, Mobil, Kontakt, Links …) + KI (Tippfehler, Unklares)
+Analyse: deterministische Prüfungen (HTTPS, Mobil, Kontakt, Links …) + KI (Unklares, kein Tippfehler-Suchen)
         │          jeder KI-Befund braucht ein wörtliches Zitat aus der Website, sonst verworfen
         ▼
 Scoring: nur belastbare, geschäftlich relevante Befunde; Ausschluss bei Sperre/fehlender E-Mail …
         ▼
 Entwurf: feste Textbausteine je Befundtyp + automatische Textprüfung → .eml in data/drafts/
+        ▼
+Excel-Übersicht data/firmen.xlsx: alle Firmen, gelb = manuell prüfen (mit Grund)
+
+Oberfläche (python main.py ui): Website eingeben → Screenshots + Design-Urteil (veraltet? ansprechend?)
 ```
 
 Jeder Schritt ist pro Unternehmen in der Datenbank vermerkt. Ein zweiter Lauf überspringt
@@ -51,6 +55,9 @@ modules/
   quality_control.py   Qualitätsbewertung (docs/qualitaet.md)
   website_checks.py    deterministische Prüfungen
   llm.py / analyzer.py KI-Analyse mit Belegprüfung und Injection-Schutz
+  design_review.py     Screenshots, Design-Signale, Design-Urteil (Regeln + DeepSeek)
+  excel_export.py      Excel-Übersicht aller Firmen
+  web_ui.py            lokale Oberfläche (Standardbibliothek, kein Framework)
   lead_scoring.py      Bewertung und Auswahl der Befunde
   pitch.py             Anti-Pitch-Bausteine und Textprüfung
   mailer.py            .eml-Entwürfe; Versand nur mit Freigabe (standardmäßig aus)
@@ -149,6 +156,33 @@ python main.py drafts
 
 Die `.eml`-Dateien lassen sich mit jedem Mailprogramm öffnen, prüfen und von Hand versenden.
 
+### Excel-Übersicht
+
+Nach jedem `run` wird `data/firmen.xlsx` geschrieben (oder von Hand: `python main.py export`).
+Blatt „Firmen“: eine Zeile pro Firma mit Kontaktdaten, Status je Schritt, Score, Design-Urteil.
+**Gelb = manuell prüfen** (kein Entwurf entstanden), die Spalte „Grund“ sagt warum – z. B.
+„Crawl übersprungen: nur Verzeichnis-/Social-Profil“ oder „kein belastbarer Befund“. Diese Zeilen
+stehen oben. Blatt „Befunde“: alle Befunde der letzten Analyse.
+
+```bash
+python main.py export
+```
+
+### Oberfläche: Screenshot + Design-Urteil
+
+```bash
+python main.py ui
+```
+
+Unter Windows: Doppelklick auf `oberflaeche.bat`. Öffnet http://127.0.0.1:8765 (nur lokal erreichbar).
+
+- URL eingeben oder bei einer Firma auf „Prüfen“ klicken.
+- Es entstehen Screenshots am Computer (1366 px) und am Handy (390 px), beide herunterladbar.
+- Das Urteil (modern / in Ordnung / veraltet / sehr veraltet, Note 1–10, „Schlecht“, „Gut“,
+  Aufhänger fürs Gespräch) kommt von DeepSeek, wenn `DEEPSEEK_API_KEY` gesetzt ist, sonst aus festen
+  Regeln. Es geht nur ums Design, nicht um Tippfehler.
+- Gespeichert wird alles in `data/design/<domain>/`; das Urteil erscheint auch in der Excel-Datei.
+
 Kontakte festhalten (auch Telefon, Besuch, frühere Kontakte):
 
 ```bash
@@ -197,7 +231,7 @@ Die Tests brauchen weder Internet noch API-Schlüssel noch einen Mailserver: Web
 einem lokalen Testserver (`tests/fixtures/sites/`), Google, DeepSeek und SMTP werden simuliert.
 Die Browser-Tests starten ein echtes Headless-Chromium.
 
-Stand 29.10.2026: 467 Tests bestanden. Ergebnisse mit echten Websites: `docs/stichprobe.md`
+Stand 29.10.2026: 475 Tests bestanden. Ergebnisse mit echten Websites: `docs/stichprobe.md`
 und `docs/qualitaet.md`.
 
 ## Fehlerbehebung
@@ -220,11 +254,13 @@ Logs: `logs/outreach.jsonl` (eine JSON-Zeile pro Eintrag, Zugangsdaten werden ma
 - Telefonnummern werden im Text nur mit Kennzeichnung („Tel.“, „Mobil“ …) oder im Format +49
   erkannt – bewusst vorsichtig, damit keine Postleitzahl als Nummer gilt.
 - Inhalte in Bildern (z. B. Kontaktdaten als Grafik) werden nicht erkannt.
-- KI-Einschätzungen zu Verständlichkeit/Widersprüchen sind schwächer als Rechtschreibbefunde und
-  zählen im Scoring kaum; die echte Stichprobe ist noch klein (`docs/stichprobe.md`).
+- Rechtschreib-/Tippfehler werden bewusst nicht mehr gesucht (kein Gesprächsanlass).
+- KI-Einschätzungen zu Verständlichkeit/Widersprüchen zählen im Scoring kaum; die echte Stichprobe ist noch klein (`docs/stichprobe.md`).
 - Performance wird nur grob aus einer einzelnen Messung beurteilt, nicht mit Lighthouse.
 - Firmen ohne eigene Website werden markiert, aber nicht angeschrieben (separate Ansprache nötig).
-- Eine grafische Oberfläche gibt es noch nicht.
+- Die DeepSeek-API kann keine Bilder ansehen. Das Design-Urteil beruht auf gemessenen Signalen
+  (Tabellen-Layout, veraltete Tags, feste Breite, Schriften, Bildqualität, Handy-Tauglichkeit …);
+  den Screenshot beurteilst du selbst. Moderne, aber langweilige Seiten erkennt das nicht.
 
 ## Recht und Datenschutz
 
